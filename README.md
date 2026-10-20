@@ -187,6 +187,19 @@ npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过�
 BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 ```
 
+## Release
+
+发布流程已配置在 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
+
+1. 更新 `package.json` 版本号和下方 Changelog；
+2. 提交并打 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`；
+3. GitHub Actions 会运行测试、`npm pack`、上传 tarball、创建 GitHub Release；
+4. 若仓库配置了 `NPM_TOKEN` secret，还会执行 `npm publish --provenance`（已发布的版本会跳过）。
+
+`NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
+
+已发布：[`v0.1.0-beta.1`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.1)（prerelease，含 npm tarball）。
+
 ## 后续计划
 
 - **弹幕**：查看当前视频弹幕、发送弹幕（先 dry-run，确认后再发送）。

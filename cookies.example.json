@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "savedAt": "2026-01-01T00:00:00.000Z",
+  "source": "example",
+  "cookies": {
+    "SESSDATA": "<paste SESSDATA here>",
+    "bili_jct": "<paste bili_jct here>",
+    "DedeUserID": "<paste DedeUserID here>",
+    "buvid3": "<optional buvid3>"
+  }
+}

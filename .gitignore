@@ -1,0 +1,12 @@
+node_modules/
+cache/
+.cache/
+.tmp/
+tmp/
+*.log
+cookies.json
+cookies.json.*.tmp
+*.cookies
+.env
+.env.*
+!.env.example

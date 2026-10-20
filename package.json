@@ -1,0 +1,36 @@
+{
+  "name": "bilibili-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bilibili MCP server for DeepSeek Harness and any stdio MCP client",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nuko777/bilibili-mcp.git"
+  },
+  "homepage": "https://github.com/nuko777/bilibili-mcp",
+  "bin": {
+    "bili-mcp": "./src/server.mjs",
+    "bili": "./src/cli.mjs"
+  },
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "status": "node src/cli.mjs status",
+    "save-cookie": "node scripts/save-cookie.mjs",
+    "import-cookie": "node scripts/import-cookie-file.mjs",
+    "test": "node --test test/unit.test.mjs test/mcp.test.mjs",
+    "test:live": "node --test test/live.test.mjs",
+    "verify": "node scripts/verify.mjs"
+  },
+  "keywords": [
+    "bilibili",
+    "mcp",
+    "model-context-protocol",
+    "dsh",
+    "deepseek-harness"
+  ],
+  "license": "MIT"
+}

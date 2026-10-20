@@ -14,6 +14,25 @@
 
 > 本项目是个人向工具，不是 B 站官方 SDK。接口可能随 B 站调整而变化；使用前请阅读 [安全说明](docs/SECURITY.md)。
 
+## npm beta
+
+包名：`@nuko777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
+
+本地已用 `npm pack --dry-run` 验证包内容。发布 beta 后安装：
+
+```bash
+npm install -g @nuko777/bilibili-mcp@beta
+bili --help
+```
+
+> `bili-mcp` 是 stdio MCP server，不要直接在交互终端里裸跑；调试用 `bili` CLI。
+
+也可以不安装直接跑：
+
+```bash
+npx -y -p @nuko777/bilibili-mcp@beta bili --help
+```
+
 ## 快速开始
 
 ```bash
@@ -160,11 +179,18 @@ npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过�
 BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 ```
 
+## 后续计划
+
+- **弹幕**：查看当前视频弹幕、发送弹幕（先 dry-run，确认后再发送）。
+- **删除**：删除自己发布的评论、删除自己发布的动态。
+- 以上功能需要新的 B 站端点和写权限校验，尚未在本版本实现；欢迎 issue 讨论优先级。
+
 ## 已知限制
 
 - 评论可能进入 `state=17`（审核中/仅自己可见）；工具会返回 `state`/`visible`/`visibility_unknown`，但无法绕过审核。
 - `videoshot` 回退依赖 ffmpeg；未安装 ffmpeg 时返回整张雪碧图，不裁切单帧。
-- 未实现每日签到、银瓜子兑换、弹幕、直播、付费/DRM 内容。
+- 未实现每日签到、银瓜子兑换、直播、付费/DRM 内容。
+- 弹幕查看/发送、删除评论/动态在后续计划中，当前版本尚未提供。
 - B 站接口可能随时调整；端点集中在 `src/api/*`，错误会带原始 `code` 便于更新。
 - 动态详情的旧接口已不可用，只保留动态流读取。
 

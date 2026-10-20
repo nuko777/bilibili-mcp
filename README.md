@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.1`（npm dist-tag：`beta`）：
+已发布 `0.1.0-beta.2`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -28,11 +28,17 @@ bili --help
 
 > `bili-mcp` 是 stdio MCP server，不要直接在交互终端里裸跑；调试用 `bili` CLI。
 
+如果 npm registry 是镜像源（例如 npmmirror），安装时加：
+
+```bash
+npm install -g @lobo777/bilibili-mcp@beta --registry=https://registry.npmjs.org
+```
+
 也可以从 GitHub 安装最新 main：
 
 ```bash
 npm install github:nuko777/bilibili-mcp
-bili --help
+npx bili --help
 ```
 
 不安装直接跑：

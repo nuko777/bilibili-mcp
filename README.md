@@ -49,6 +49,17 @@ npx -y -p @lobo777/bilibili-mcp@beta bili --help
 
 ## 快速开始
 
+直接从 npm 安装 beta：
+
+```bash
+npm install -g @lobo777/bilibili-mcp@beta
+bili --help
+```
+
+如果 npm registry 是镜像源（例如 npmmirror），加 `--registry=https://registry.npmjs.org`。
+
+从源码运行：
+
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
@@ -60,7 +71,7 @@ npm start         # 启动 stdio MCP Server
 
 ### 接入 DSH
 
-在 DSH 的 profile patch 中加入（路径换成你的实际仓库路径）：
+先全局安装 npm beta（见上），再在 DSH 的 profile patch 中加入：
 
 ```yaml
 - insert:
@@ -69,26 +80,50 @@ npm start         # 启动 stdio MCP Server
       config:
         transport: stdio
         serverName: bilibili
-        command: node
-        args:
-          - "/absolute/path/to/bilibili-mcp/src/server.mjs"
-        cwd: "/absolute/path/to/bilibili-mcp"
+        command: bili-mcp
+        args: []
         toolCallTimeoutMs: 180000
         failOnStartupError: false
 ```
+
+不想全局安装时，用 npx：
+
+```yaml
+command: npx
+args:
+  - "-y"
+  - "-p"
+  - "@lobo777/bilibili-mcp@beta"
+  - "bili-mcp"
+```
+
+Windows 上如果客户端无法解析 `.cmd`，用 `bili-mcp.cmd` 或上面的 npx 写法。
 
 重启/重载 MCP 连接后，工具会以 `mcp__bilibili__*` 出现。
 
 ### 接入其他 MCP 客户端
 
-任何支持 stdio MCP 的客户端都可以使用：
+任何支持 stdio MCP 的客户端都可以使用（全局安装后）：
 
 ```json
 {
   "mcpServers": {
     "bilibili": {
-      "command": "node",
-      "args": ["/absolute/path/to/bilibili-mcp/src/server.mjs"]
+      "command": "bili-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+或使用 npx：
+
+```json
+{
+  "mcpServers": {
+    "bilibili": {
+      "command": "npx",
+      "args": ["-y", "-p", "@lobo777/bilibili-mcp@beta", "bili-mcp"]
     }
   }
 }
@@ -233,7 +268,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 ### 0.1.0-beta.2 — 2026-10-21
 
-- GitHub Actions `Release` workflow：打 tag 后自动测试、打包、创建 GitHub Release，并通过 npm `NPM_TOKEN` 发布到 npm
+- GitHub Actions `Release` workflow：打 tag 后自动测试、打包、创建 GitHub Release，并通过仓库 secret `NPM_TOKEN` 发布到 npm（已用 `v0.1.0-beta.2` 验证）
 - 新增置顶动态的后续计划
 - 补充 release 流程、npm beta 安装说明和版本化 Changelog
 

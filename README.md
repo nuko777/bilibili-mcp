@@ -1,6 +1,7 @@
 # bilibili-mcp
 
 [![CI](https://github.com/nuko777/bilibili-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/nuko777/bilibili-mcp/actions/workflows/ci.yml)
+[![npm beta](https://img.shields.io/npm/v/@lobo777/bilibili-mcp/beta?label=npm%20beta)](https://www.npmjs.com/package/@lobo777/bilibili-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 一个面向 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai) 以及任意 MCP 客户端的 Bilibili MCP Server。
@@ -14,11 +15,11 @@
 
 > 本项目是个人向工具，不是 B 站官方 SDK。接口可能随 B 站调整而变化；使用前请阅读 [安全说明](docs/SECURITY.md)。
 
-## npm beta（npm 审核中）
+## npm beta
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-`0.1.0-beta.1` 已提交到 npm。新包会先显示 `0.0.0-stage` 占位版本，并等待 npm 的 staged/security review；审核通过后以下命令才可用：
+已发布 `0.1.0-beta.1`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -27,14 +28,14 @@ bili --help
 
 > `bili-mcp` 是 stdio MCP server，不要直接在交互终端里裸跑；调试用 `bili` CLI。
 
-审核期间可以直接从 GitHub 安装：
+也可以从 GitHub 安装最新 main：
 
 ```bash
 npm install github:nuko777/bilibili-mcp
 bili --help
 ```
 
-也可以不安装直接跑：
+不安装直接跑：
 
 ```bash
 npx -y -p @lobo777/bilibili-mcp@beta bili --help

@@ -225,6 +225,12 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 ## Changelog
 
+### 0.1.0-beta.2 — 2026-10-21
+
+- GitHub Actions `Release` workflow：打 tag 后自动测试、打包、创建 GitHub Release，并通过 npm `NPM_TOKEN` 发布到 npm
+- 新增置顶动态的后续计划
+- 补充 release 流程、npm beta 安装说明和版本化 Changelog
+
 ### 0.1.0-beta.1 — 2026-10-21
 
 首个公开 beta 版本，npm dist-tag `beta`。

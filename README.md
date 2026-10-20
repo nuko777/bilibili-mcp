@@ -1,5 +1,8 @@
 # bilibili-mcp
 
+[![CI](https://github.com/nuko777/bilibili-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/nuko777/bilibili-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 一个面向 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai) 以及任意 MCP 客户端的 Bilibili MCP Server。
 
 - Node.js >= 20.10（推荐 24），**零运行时依赖**

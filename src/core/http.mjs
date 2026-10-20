@@ -1,6 +1,6 @@
 import { BiliError, assertSuccess, hintForCode, hintForStatus } from './errors.mjs';
 import { parseCookieHeader, serializeCookies } from './cookies.mjs';
-import { buildQuery, extractWbiKeys, signParams } from './wbi.mjs';
+import { buildQuery, encodeWbiValue, extractWbiKeys, signParams } from './wbi.mjs';
 
 const DEFAULT_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36';
@@ -219,7 +219,9 @@ export class BiliClient {
       requestParams = await this.sign(requestParams);
       // Use the same encoder that was used for w_rid; URLSearchParams would
       // turn %20 into + and re-encode the characters stripped by WBI.
-      target.search = buildQuery(requestParams, { sort: true });
+      // Keep w_rid last, matching the canonical WBI query layout.
+      const { w_rid: wRid, ...signedBase } = requestParams;
+      target.search = `${buildQuery(signedBase, { sort: true })}&w_rid=${encodeWbiValue(wRid)}`;
     } else {
       for (const [key, value] of Object.entries(requestParams)) {
         target.searchParams.set(key, value);

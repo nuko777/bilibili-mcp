@@ -14,7 +14,7 @@
 ## 快速开始
 
 ```bash
-git clone https://github.com/<your-name>/bilibili-mcp.git
+git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
 npm test          # 12 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server

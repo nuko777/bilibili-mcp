@@ -1,5 +1,5 @@
 {
-  "name": "@nuko777/bilibili-mcp",
+  "name": "@lobo777/bilibili-mcp",
   "version": "0.1.0-beta.1",
   "private": false,
   "description": "Bilibili MCP server for DeepSeek Harness and any stdio MCP client",

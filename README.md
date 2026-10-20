@@ -16,12 +16,12 @@
 
 ## npm beta
 
-包名：`@nuko777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
+包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
 本地已用 `npm pack --dry-run` 验证包内容。发布 beta 后安装：
 
 ```bash
-npm install -g @nuko777/bilibili-mcp@beta
+npm install -g @lobo777/bilibili-mcp@beta
 bili --help
 ```
 
@@ -30,7 +30,7 @@ bili --help
 也可以不安装直接跑：
 
 ```bash
-npx -y -p @nuko777/bilibili-mcp@beta bili --help
+npx -y -p @lobo777/bilibili-mcp@beta bili --help
 ```
 
 ## 快速开始

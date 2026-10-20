@@ -14,11 +14,11 @@
 
 > 本项目是个人向工具，不是 B 站官方 SDK。接口可能随 B 站调整而变化；使用前请阅读 [安全说明](docs/SECURITY.md)。
 
-## npm beta
+## npm beta（npm 审核中）
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-本地已用 `npm pack --dry-run` 验证包内容。发布 beta 后安装：
+`0.1.0-beta.1` 已提交到 npm。新包会先显示 `0.0.0-stage` 占位版本，并等待 npm 的 staged/security review；审核通过后以下命令才可用：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -26,6 +26,13 @@ bili --help
 ```
 
 > `bili-mcp` 是 stdio MCP server，不要直接在交互终端里裸跑；调试用 `bili` CLI。
+
+审核期间可以直接从 GitHub 安装：
+
+```bash
+npm install github:nuko777/bilibili-mcp
+bili --help
+```
 
 也可以不安装直接跑：
 

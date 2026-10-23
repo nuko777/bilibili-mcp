@@ -25,6 +25,7 @@ import { listComments } from '../api/comments.mjs';
 import { BiliError } from '../core/errors.mjs';
 import {
   coinVideo,
+  deleteComment,
   favoriteVideo,
   followUser,
   likeVideo,
@@ -534,6 +535,29 @@ export const tools = [
         parent: args.parent,
         mentionUserIds: args.mention_user_ids || [],
         imagePaths: args.image_paths || [],
+        confirm: args.confirm === true,
+      });
+    },
+  },
+  {
+    name: 'delete_comment',
+    title: '删除自己的评论',
+    description:
+      '删除当前账号自己的视频/动态评论。默认只预览；confirm=true 才删除。只能删除自己的评论，删除不可撤销。',
+    annotations: write('删除评论（默认 dry-run）'),
+    inputSchema: schema({
+      video: videoRef,
+      dynamic_id: str('动态 ID；与 video 二选一'),
+      rpid: str('要删除的评论 rpid'),
+      confirm: bool('必须为 true 才删除', { default: false }),
+    }, ['rpid']),
+    handler: async (args, ctx) => {
+      if (!args.video && !args.dynamic_id) throw new Error('需要提供 video 或 dynamic_id');
+      if (args.video && args.dynamic_id) throw new Error('video 与 dynamic_id 只能提供其中一个');
+      return deleteComment(ctx.client, {
+        bvid: args.video,
+        dynamicId: args.dynamic_id,
+        rpid: args.rpid,
         confirm: args.confirm === true,
       });
     },

@@ -75,7 +75,7 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
   assert.ok(init.result.instructions.includes('bilibili-login'));
 
   const list = await client.send('tools/list', {});
-  assert.equal(list.result.tools.length, 29);
+  assert.equal(list.result.tools.length, 30);
   const names = new Set(list.result.tools.map((tool) => tool.name));
   for (const expected of [
     'auth_status',
@@ -89,6 +89,7 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
     'coin_video',
     'favorite_video',
     'post_comment',
+    'delete_comment',
     'post_dynamic',
     'notifications',
     'messages',

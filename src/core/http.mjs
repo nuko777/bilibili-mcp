@@ -113,6 +113,10 @@ export class BiliClient {
     return item.value;
   }
 
+  clearCache() {
+    this.cache.clear();
+  }
+
   cacheSet(key, value, ttl = 0) {
     if (!ttl) return;
     this.cache.set(key, { value, expiresAt: Date.now() + ttl });

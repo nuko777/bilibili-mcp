@@ -39,7 +39,7 @@ src/server.mjs
 
 ## 写工具（7）
 
-`like_video`、`coin_video`、`favorite_video`、`post_comment`（支持 @）、`post_dynamic`、`follow_user`、`send_message`。
+`like_video`、`coin_video`、`favorite_video`、`post_comment`（支持 @）、`delete_comment`、`post_dynamic`、`follow_user`、`send_message`。
 
 全部默认 dry-run；`confirm === true` 才发送写请求。非 GET 请求默认不重试。
 

@@ -297,6 +297,7 @@ export async function postComment(
     retry: 0,
     referer,
   });
+  client.clearCache?.();
   const rpid = result.data?.rpid_str || result.data?.rpid || null;
   let state = null;
   let visible = null;
@@ -406,6 +407,45 @@ async function uploadDynamicImage(client, filePath) {
     img_width: image.image_width,
     img_height: image.image_height,
     img_size: image.img_size,
+  };
+}
+
+export async function deleteComment(
+  client,
+  { bvid, aid, dynamicId, rpid, confirm = false } = {},
+) {
+  client.requireLogin();
+  if (!rpid) throw new BiliError('需要提供要删除的评论 rpid', { code: -400 });
+  const resolved = await resolveCommentTarget(client, { bvid, aid, dynamicId });
+  const target = resolved.target;
+  const details = {
+    comment_oid: resolved.oid,
+    comment_type: resolved.type,
+    rpid: String(rpid),
+    warning: '只能删除自己的评论；删除不可撤销。',
+  };
+  if (!confirm) {
+    return preview('delete_comment', target, details, '删除评论不可撤销。确认后设 confirm=true。');
+  }
+  client.requireCsrf();
+  const referer =
+    resolved.kind === 'video'
+      ? `https://www.bilibili.com/video/${target.bvid}/`
+      : `https://www.bilibili.com/opus/${target.dynamic_id}`;
+  const result = await client.postForm(
+    'https://api.bilibili.com/x/v2/reply/del',
+    { oid: resolved.oid, type: resolved.type, rpid: String(rpid), csrf: client.csrf },
+    { retry: 0, referer },
+  );
+  client.clearCache?.();
+  return {
+    ok: result.code === 0,
+    action: 'delete_comment',
+    target,
+    rpid: String(rpid),
+    comment_oid: resolved.oid,
+    comment_type: resolved.type,
+    result: { code: result.code, message: result.message },
   };
 }
 

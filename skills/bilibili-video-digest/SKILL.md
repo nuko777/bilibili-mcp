@@ -52,6 +52,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - 用户明确同意后，再带 `confirm: true` 调用；
 - `coin_video` **不可撤销**，执行前必须确认数量和余额；
 - `post_comment`、`post_dynamic`、`send_message` 是公开/对外行为，先复述文案；
+- `delete_comment` 只能删自己的评论，且不可撤销，必须先 dry-run 并让用户确认 rpid。
 - 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；回复评论继续用 `root`/`parent`，工具会自动生成 `回复 @父作者 : 正文`。
 - `like_video`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；
 - 收藏需要 `folder_id`：先调 `list_favorites` 不带 folder_id，拿到收藏夹列表。

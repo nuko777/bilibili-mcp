@@ -8,7 +8,7 @@
 
 - Node.js >= 20.10（推荐 24），**零运行时依赖**
 - stdio JSON-RPC 2.0，可直接接入 DSH、Claude Desktop、其他 MCP 客户端
-- 22 个只读工具 + 7 个写工具
+- 22 个只读工具 + 8 个写工具
 - 支持排行榜、热门、每周必看、视频信息/字幕/关键帧、评论、搜索、用户、关注、收藏、通知、私信、动态流
 - 写操作默认 dry-run，只有 `confirm=true` 才执行
 - 登录态由外部 skill/脚本注入，MCP 本身不读取浏览器、不解密 Cookie 数据库
@@ -172,7 +172,7 @@ Cookie 文件位置：
 | 消息 | `notifications`、`messages` |
 | 动态/历史 | `dynamic_feed`、`history`、`toview` |
 
-### 写入（7）
+### 写入（8）
 
 | 工具 | 说明 |
 |---|---|
@@ -180,6 +180,7 @@ Cookie 文件位置：
 | `coin_video` | 投币 1–2 枚，可选同时点赞；**不可撤销** |
 | `favorite_video` | 收藏/取消收藏 |
 | `post_comment` | 视频/动态评论、楼中楼回复、@、可选本地图片 |
+| `delete_comment` | 删除自己的视频/动态评论；不可撤销 |
 | `post_dynamic` | 发布文本/图片动态 |
 | `follow_user` | 关注/取关 |
 | `send_message` | 发送私信 |
@@ -296,6 +297,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - `post_comment` 支持 `mention_user_ids`，发送 `at_name_to_mid`，显式 @ 用户
 - 楼中楼回复自动生成 `回复 @父评论作者 : 正文` 格式；`comments` 支持 `root` 读取完整楼中楼
 - 修复视频评论 `state=17`：评论写请求的 Referer 对齐视频/OPUS 页面 URL，而不是默认首页
+- 新增 `delete_comment`：删除自己的视频/动态评论，默认 dry-run；删除后清理读缓存
 - `video_comments` 泛化为 `comments`，支持视频/动态、楼中楼、state 与 @成员；传 `root` 读取完整楼中楼
 - 查看/发送弹幕
 - 删除自己的评论/动态

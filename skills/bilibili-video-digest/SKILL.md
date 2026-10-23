@@ -19,9 +19,11 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 3. 无字幕或需要画面证据：`mcp__bilibili__video_frames`
    - 默认 3 帧（15%/50%/85%）；
    - 可传 `times: ["0:30","1:20","50%"]`；
+   - 帧数多时传 `type:"grid"` + `count`，最多 9 张拼图、每张最多 9 帧，最后一张自动留黑位；`labels` 控制左上角序号；
    - 工具会返回图片；直接看图片描述画面、字幕、场景。
 4. 需要观众反馈：`mcp__bilibili__comments`（视频传 `video`，动态传 `dynamic_id`；先看热门，必要时按时间；传 `root` 可读完整楼中楼）。
-5. 需要关联内容：`mcp__bilibili__related_videos`。
+5. 需要单条动态详情：`mcp__bilibili__dynamic_detail`；
+6. 需要关联内容：`mcp__bilibili__related_videos`。
 
 回答要求：
 
@@ -33,7 +35,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 ## 2. 榜单 / 热门 / 每周必看
 
 - 排行榜：`mcp__bilibili__rank_list`，可传 `rid` 分区、`type`；
-- 综合热门：`mcp__bilibili__popular_list`；
+- 综合热门：`mcp__bilibili__popular_list`；默认 H5 热门流（idx 滑动），`personalized=true` 走 Web 个性化推荐；
 - 每周必看：先 `weekly_issues` 找期数，再 `weekly_list`（不传 number 默认最新）；
 - 标签由工具逐条补齐，默认只补前 20 条；需要更省请求时设 `include_tags=false`，或降低 `tag_limit`。
 
@@ -52,10 +54,15 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - 用户明确同意后，再带 `confirm: true` 调用；
 - `coin_video` **不可撤销**，执行前必须确认数量和余额；
 - `post_comment`、`post_dynamic`、`send_message` 是公开/对外行为，先复述文案；
-- `delete_comment` 只能删自己的评论，且不可撤销，必须先 dry-run 并让用户确认 rpid。
+- `delete_comment` / `delete_dynamic` 只能删自己的内容，且不可撤销，必须先 dry-run 并让用户确认 rpid/动态 ID。
+- `top_dynamic` 置顶/取消置顶自己的动态；`top:true/false`，默认 dry-run。
+- `update_profile` 修改昵称/签名；昵称消耗 6 硬币，必须先 dry-run 并让用户确认。
+- `toview_video` 添加/移除稍后再看，可逆；`add:true/false`，默认 dry-run。
+- `send_danmaku` 发送弹幕是公开内容，先 dry-run 并让用户确认文本。
 - 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；回复评论继续用 `root`/`parent`，工具会自动生成 `回复 @父作者 : 正文`。
-- `like_video`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；
-- 收藏需要 `folder_id`：先调 `list_favorites` 不带 folder_id，拿到收藏夹列表。
+- `like_video`、`like_comment`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；
+- 收藏夹创建/改名/删除是写操作，必须先 dry-run；`create_favorite_folder` / `edit_favorite_folder` / `delete_favorite_folder` 分别对应。
+- 收藏单个夹传 `folder_id`，多个夹传 `folder_ids`；不知道 folder id 时先调 `list_favorites` 不带 folder_id。
 
 不要：
 
@@ -70,7 +77,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - 收藏：`mcp__bilibili__list_favorites`；
 - 回复/@/赞：`mcp__bilibili__notifications`；
 - 私信：`mcp__bilibili__messages`（不传 talker_id 列会话，传了读聊天记录）；
-- 动态：`mcp__bilibili__dynamic_feed`。
+- 动态：`mcp__bilibili__dynamic_feed`（关注流）、`mcp__bilibili__dynamic_detail`（单条）、`mcp__bilibili__user_dynamics`（指定用户/自己）。
 
 如果 `auth_status` 返回 `is_login: false`，转到 `bilibili-login` skill，不要尝试在 MCP 内提取登录态。
 

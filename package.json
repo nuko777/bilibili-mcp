@@ -1,6 +1,6 @@
 {
   "name": "@lobo777/bilibili-mcp",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "private": false,
   "description": "Bilibili MCP server for DeepSeek Harness and any stdio MCP client",
   "type": "module",
@@ -14,7 +14,6 @@
     "src/",
     "scripts/",
     "skills/",
-    "docs/",
     "README.md",
     "LICENSE",
     "cookies.example.json"

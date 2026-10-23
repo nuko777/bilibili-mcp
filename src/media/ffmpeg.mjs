@@ -108,9 +108,12 @@ export function runProcess(command, args, { timeoutMs = 60_000, cwd } = {}) {
   });
 }
 
-export async function grabFrame({ url, time, output, width = 960, timeoutMs = 45_000, referer = 'https://www.bilibili.com/' }) {
+export async function grabFrame({ url, time, output, width = 960, height = null, timeoutMs = 45_000, referer = 'https://www.bilibili.com/' }) {
   const ffmpeg = await requireFfmpeg();
   await ensureDir(path.dirname(output));
+  const scaleFilter = height
+    ? `scale=-2:${Math.max(360, Math.min(Number(height) || 720, 2160))}`
+    : `scale=${Math.max(320, Math.min(Number(width) || 960, 1920))}:-2`;
   const args = [
     '-hide_banner',
     '-loglevel',
@@ -124,7 +127,7 @@ export async function grabFrame({ url, time, output, width = 960, timeoutMs = 45
     '-frames:v',
     '1',
     '-vf',
-    `scale=${Math.max(320, Math.min(Number(width) || 960, 1920))}:-2`,
+    scaleFilter,
     '-q:v',
     '3',
     '-y',
@@ -148,7 +151,7 @@ export async function grabFrame({ url, time, output, width = 960, timeoutMs = 45
     '-frames:v',
     '1',
     '-vf',
-    `scale=${Math.max(320, Math.min(Number(width) || 960, 1920))}:-2`,
+    scaleFilter,
     '-q:v',
     '3',
     '-y',
@@ -173,6 +176,112 @@ export async function grabFrame({ url, time, output, width = 960, timeoutMs = 45
     throw new Error('ffmpeg 未生成有效的图片文件');
   }
   return { file: output, size: stat.size };
+}
+
+export async function findFont() {
+  const candidates = [
+    process.env.BILI_FONT,
+    process.platform === 'win32' ? 'C:/Windows/Fonts/arialbd.ttf' : null,
+    process.platform === 'win32' ? 'C:/Windows/Fonts/arial.ttf' : null,
+    process.platform === 'win32' ? 'C:/Windows/Fonts/segoeuib.ttf' : null,
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf',
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
+
+function escapeFilterPath(value) {
+  return String(value).replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
+}
+
+export async function composeGrid({
+  files,
+  output,
+  columns = 3,
+  rows = 3,
+  labels = true,
+  labelStart = 1,
+  fontSize = 60,
+  timeoutMs = 90_000,
+}) {
+  const ffmpeg = await requireFfmpeg();
+  if (!files.length) throw new Error('没有可拼接的帧');
+  if (files.length > columns * rows) {
+    throw new Error(`网格最多 ${columns * rows} 帧，实际 ${files.length} 帧`);
+  }
+  await ensureDir(path.dirname(output));
+  const layout = [];
+  for (let index = 0; index < files.length; index += 1) {
+    const row = Math.floor(index / columns);
+    const col = index % columns;
+    const x = col === 0 ? '0' : Array(col).fill('w0').join('+');
+    const y = row === 0 ? '0' : Array(row).fill('h0').join('+');
+    layout.push(`${x}_${y}`);
+  }
+  const font = labels ? await findFont() : null;
+  if (files.length === 1) {
+    if (font) {
+      const fontPath = escapeFilterPath(font);
+      const labelSize = Math.max(20, Math.min(Number(fontSize) || 60, 120));
+      await runProcess(
+        ffmpeg,
+        [
+          '-hide_banner', '-loglevel', 'error', '-i', files[0],
+          '-vf', `drawtext=fontfile='${fontPath}':text='${labelStart}':fontcolor=white:fontsize=${labelSize}:x=24:y=24:box=1:boxcolor=black@0.35:boxborderw=8`,
+          '-frames:v', '1', '-q:v', '4', '-y', output,
+        ],
+        { timeoutMs },
+      );
+    } else {
+      await fs.copyFile(files[0], output);
+    }
+    const singleStat = await fs.stat(output).catch(() => null);
+    if (!singleStat || singleStat.size < 1000) throw new Error('网格图片生成失败');
+    return { file: output, size: singleStat.size, labels: Boolean(font) };
+  }
+  const inputs = files.flatMap((file) => ['-i', file]);
+  let filter;
+  if (font) {
+    const fontPath = escapeFilterPath(font);
+    const labelSize = Math.max(20, Math.min(Number(fontSize) || 60, 120));
+    const parts = files.map((_, index) =>
+      `[${index}:v]drawtext=fontfile='${fontPath}':text='${labelStart + index}':fontcolor=white:fontsize=${labelSize}:x=24:y=24:box=1:boxcolor=black@0.35:boxborderw=8[v${index}]`,
+    );
+    const labelsFilter = files.map((_, index) => `[v${index}]`).join('');
+    filter = `${parts.join(';')};${labelsFilter}xstack=inputs=${files.length}:layout=${layout.join('|')}:fill=black`;
+  } else {
+    const inputLabels = files.map((_, index) => `[${index}:v]`).join('');
+    filter = `${inputLabels}xstack=inputs=${files.length}:layout=${layout.join('|')}:fill=black`;
+  }
+  await runProcess(
+    ffmpeg,
+    [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      ...inputs,
+      '-filter_complex',
+      filter,
+      '-frames:v',
+      '1',
+      '-q:v',
+      '4',
+      '-y',
+      output,
+    ],
+    { timeoutMs },
+  );
+  const stat = await fs.stat(output).catch(() => null);
+  if (!stat || stat.size < 1000) throw new Error('网格图片生成失败');
+  return { file: output, size: stat.size, labels: Boolean(font) };
 }
 
 export async function cropSprite({

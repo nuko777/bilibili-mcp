@@ -154,19 +154,19 @@ export function parseTimeExpression(expression, duration) {
 }
 
 export function resolveFrameTimes({ times, count = 3, duration = 0 } = {}) {
-  const safeCount = Math.max(1, Math.min(Number(count) || 3, 8));
+  const safeCount = Math.max(1, Math.min(Number(count) || 3, 12));
   const explicit = times !== undefined && times !== null && times !== '';
   let expressions = times;
   if (typeof expressions === 'string' && expressions.includes(',')) {
     expressions = expressions.split(',').map((part) => part.trim()).filter(Boolean);
   }
   if (!explicit) {
-    const percents = [15, 50, 85, 30, 70, 5, 95, 40];
+    const percents = [15, 50, 85, 30, 70, 5, 95, 40, 60];
     expressions = percents.slice(0, safeCount).map((percent) => `${percent}%`);
   }
   if (!Array.isArray(expressions)) expressions = [expressions];
   if (explicit && !expressions.length) throw new Error('times 不能为空数组');
-  const limit = explicit ? Math.min(expressions.length, 8) : safeCount;
+  const limit = explicit ? Math.min(expressions.length, 12) : safeCount;
   const resolved = expressions.slice(0, limit).map((expression) => parseTimeExpression(expression, duration));
   return [...new Set(resolved.map((value) => Math.round(value * 1000) / 1000))].sort((a, b) => a - b);
 }

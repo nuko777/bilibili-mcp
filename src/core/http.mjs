@@ -212,6 +212,7 @@ export class BiliClient {
       timeoutMs = this.timeoutMs,
       cookieHeader,
       referer,
+      responseType = 'json',
     } = options;
 
     if (!options.skipBuvid) await this.ensureBuvid();
@@ -286,6 +287,18 @@ export class BiliClient {
       }
 
       const text = await response.text();
+      if (responseType === 'text') {
+        if (!response.ok) {
+          throw new BiliError(`B 站返回 HTTP ${response.status}`, {
+            status: response.status,
+            endpoint: target.pathname,
+            hint: hintForStatus(response.status),
+            details: text.slice(0, 300),
+          });
+        }
+        if (method === 'GET' && cacheTtl) this.cacheSet(cacheKey, text, cacheTtl);
+        return text;
+      }
       let parsed;
       let parseError = false;
       try {
@@ -341,6 +354,10 @@ export class BiliClient {
   /**
    * GET with WBI signature; retries once with a fresh mixin key on signature/risk errors.
    */
+  async getText(url, params = {}, options = {}) {
+    return this.request(url, { ...options, method: 'GET', params, responseType: 'text' });
+  }
+
   async getSigned(url, params = {}, options = {}) {
     try {
       return await this.request(url, { ...options, method: 'GET', params, signed: true });

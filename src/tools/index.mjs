@@ -10,7 +10,7 @@ import {
   watchHistory,
 } from '../api/videos.mjs';
 import { getTranscript } from '../media/subtitles.mjs';
-import { framesAsImages, videoFrames } from '../media/frames.mjs';
+import { framesAsImages, imageFile, videoFrames } from '../media/frames.mjs';
 import { listFavoriteFolders, listFavorites } from '../api/favorites.mjs';
 import { listFollowers, listFollowings, relationStat } from '../api/relations.mjs';
 import {
@@ -20,18 +20,28 @@ import {
   unreadNotifications,
 } from '../api/notifications.mjs';
 import { fetchSessionMessages, listSessions } from '../api/messages.mjs';
-import { dynamicFeed } from '../api/dynamics.mjs';
+import { dynamicDetail, dynamicFeed, userDynamics } from '../api/dynamics.mjs';
 import { listComments } from '../api/comments.mjs';
+import { listDanmaku } from '../api/danmaku.mjs';
 import { BiliError } from '../core/errors.mjs';
 import {
   coinVideo,
+  createFavoriteFolder,
   deleteComment,
+  deleteDynamic,
+  deleteFavoriteFolder,
+  editFavoriteFolder,
   favoriteVideo,
   followUser,
+  likeComment,
   likeVideo,
   postComment,
   postDynamic,
+  sendDanmaku,
   sendMessage,
+  topDynamic,
+  toviewVideo,
+  updateProfile,
 } from '../api/actions.mjs';
 
 const str = (description, extra = {}) => ({ type: 'string', description, ...extra });
@@ -88,11 +98,14 @@ export const tools = [
   {
     name: 'popular_list',
     title: 'B站综合热门',
-    description: '获取 B 站综合热门视频（对应 /v/popular/all），支持分页与标签补齐。',
+    description:
+      '获取 B 站热门视频。默认走 H5 热门流（app.bilibili.com/x/v2/show/popular/index，9 卡滑动窗口，idx 游标）；personalized=true 走 Web 个性化推荐流（/v/popular/all）。支持标签补齐。',
     annotations: readOnly('读取综合热门'),
     inputSchema: schema({
-      page: num('页码，从 1 开始', { default: 1, minimum: 1 }),
-      ps: num('每页数量 1-20', { default: 20, minimum: 1, maximum: 20 }),
+      page: num('页码，从 1 开始；H5 下等价于 idx=page-1', { default: 1, minimum: 1 }),
+      ps: num('每页数量 1-20（H5 单窗口最多 9）', { default: 20, minimum: 1, maximum: 20 }),
+      personalized: bool('是否个性化推荐：true 走 Web 推荐流，false 默认走 H5 热门流', { default: false }),
+      idx: num('H5 滑动窗口游标，优先于 page', { minimum: 0 }),
       limit: num('本次返回条数（可选）', { minimum: 1, maximum: 20 }),
       include_tags: bool('是否补齐标签（默认 true）', { default: true }),
       tag_limit: num('最多补标签条数', { default: 20, minimum: 0, maximum: 50 }),
@@ -102,6 +115,8 @@ export const tools = [
         page: args.page ?? 1,
         ps: args.ps ?? 20,
         limit: args.limit,
+        personalized: args.personalized === true,
+        idx: args.idx,
         includeTags: args.include_tags !== false,
         tagLimit: args.tag_limit ?? 20,
       }),
@@ -192,7 +207,7 @@ export const tools = [
     name: 'video_frames',
     title: '视频关键帧截图',
     description:
-      '截取视频关键帧并作为图片返回。默认取 15%/50%/85% 三帧；可传秒数、时间（1:23）或百分比。DASH 抽帧失败时回退 B 站缩略图雪碧图；无 ffmpeg 时返回整张雪碧图。',
+      '截取视频关键帧。type=frames 返回单帧列表；type=grid 把最多 81 帧拼成最多 9 张图（每张最多 9 帧，最后一张自动接近正方形并留黑位），frames 返回所有拼图。支持 times 指定关键帧时间。',
     annotations: readOnly('截取视频画面（只读）'),
     inputSchema: schema({
       video: videoRef,
@@ -200,21 +215,32 @@ export const tools = [
         description: '时间点数组，例如 ["10%","50%","1:23"] 或 [12, 60]；不传则按 count 均匀取点',
         anyOf: [
           { type: 'string' },
-          { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'number' }] }, minItems: 1, maxItems: 8 },
+          { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'number' }] }, minItems: 1, maxItems: 81 },
         ],
       },
-      count: num('默认取帧数 1-6', { default: 3, minimum: 1, maximum: 6 }),
-      width: num('输出宽度 320-1920', { default: 960, minimum: 320, maximum: 1920 }),
+      type: str('返回类型：frames 单帧列表；grid 拼图（默认 frames）', { enum: ['frames', 'grid'], default: 'frames' }),
+      count: num('关键帧数：frames 1-6；grid 1-81（最多 9 张拼图）', { minimum: 1, maximum: 81 }),
+      frame_height: num('grid 单帧高度（720p=720）', { default: 720, minimum: 360, maximum: 1080 }),
+      labels: bool('grid 每格左上角白色序号（默认 true）', { default: true }),
+      width: num('frames 模式输出宽度 320-1920', { default: 960, minimum: 320, maximum: 1920 }),
       page: num('分P 序号', { default: 1, minimum: 1 }),
       max_height: num('选流最大高度', { default: 1080, minimum: 360, maximum: 2160 }),
       fallback: bool('抽帧失败时回退 videoshot 缩略图', { default: true }),
-      max_images: num('随结果返回的图片数量 1-4', { default: 3, minimum: 1, maximum: 4 }),
+      max_images: num('随结果返回的图片数量 1-9', { default: 3, minimum: 1, maximum: 9 }),
     }, ['video']),
     handler: async (args, ctx) => {
+      const type = args.type || 'frames';
+      const count = args.count ?? (type === 'grid' ? 9 : 3);
+      if (type === 'frames' && count > 6) {
+        throw new Error('frames 模式 count 最多 6；需要更多请传 type="grid"');
+      }
       const result = await videoFrames(ctx.client, {
         bvid: args.video,
         times: args.times,
-        count: args.count ?? 3,
+        count,
+        type,
+        frameHeight: args.frame_height ?? 720,
+        labels: args.labels !== false,
         width: args.width ?? 960,
         page: args.page ?? 1,
         maxHeight: args.max_height ?? 1080,
@@ -230,7 +256,6 @@ export const tools = [
       }
       return {
         ...result,
-        images: images.map(({ data, ...meta }) => meta),
         __images: images,
         hint:
           result.source === 'videoshot'
@@ -240,6 +265,23 @@ export const tools = [
             : undefined,
       };
     },
+  },
+  {
+    name: 'danmaku',
+    title: '视频弹幕',
+    description: '读取视频当前弹幕（XML 接口），支持条数限制和关键词过滤。',
+    annotations: readOnly('读取视频弹幕'),
+    inputSchema: schema({
+      video: videoRef,
+      limit: num('返回条数 1-5000', { default: 100, minimum: 1, maximum: 5000 }),
+      keyword: str('按弹幕文本过滤'),
+    }, ['video']),
+    handler: async (args, ctx) =>
+      listDanmaku(ctx.client, {
+        bvid: args.video,
+        limit: args.limit ?? 100,
+        keyword: args.keyword,
+      }),
   },
   {
     name: 'comments',
@@ -426,6 +468,32 @@ export const tools = [
     },
   },
   {
+    name: 'user_dynamics',
+    title: '用户动态流',
+    description:
+      '读取指定用户的空间动态流；不传 mid 时读取当前登录账号自己的动态。支持 offset 游标，或 page 便捷翻页。',
+    annotations: readOnly('读取用户动态'),
+    inputSchema: schema({
+      mid: str('用户 UID；不传则读取自己的动态'),
+      page: num('页码，从 1 开始；不传 offset 时生效', { default: 1, minimum: 1, maximum: 20 }),
+      offset: str('游标；优先于 page。把上一页返回的 next_offset 传进来'),
+    }),
+    handler: async (args, ctx) =>
+      userDynamics(ctx.client, {
+        mid: args.mid,
+        page: args.page ?? 1,
+        offset: args.offset,
+      }),
+  },
+  {
+    name: 'dynamic_detail',
+    title: '单条动态详情',
+    description: '按动态 ID 读取单条动态的正文、图片、视频卡片、作者、互动数和置顶标记。',
+    annotations: readOnly('读取单条动态'),
+    inputSchema: schema({ dynamic_id: str('动态 ID') }, ['dynamic_id']),
+    handler: async (args, ctx) => dynamicDetail(ctx.client, { dynamicId: args.dynamic_id }),
+  },
+  {
     name: 'history',
     title: '观看历史',
     description: '读取当前账号的观看历史（扩展能力）。',
@@ -497,7 +565,8 @@ export const tools = [
     annotations: write('收藏或取消收藏（默认 dry-run）'),
     inputSchema: schema({
       video: videoRef,
-      folder_id: str('目标收藏夹 media_id'),
+      folder_id: str('目标收藏夹 media_id（单收藏夹，兼容旧参数）'),
+      folder_ids: arr('目标收藏夹 media_id 数组，可一次收藏到多个收藏夹', { items: { type: 'string' }, maxItems: 20 }),
       favorite: bool('true 收藏，false 取消', { default: true }),
       confirm: bool('必须为 true 才执行', { default: false }),
     }, ['video']),
@@ -505,9 +574,69 @@ export const tools = [
       favoriteVideo(ctx.client, {
         bvid: args.video,
         folderId: args.folder_id,
+        folderIds: args.folder_ids || [],
         favorite: args.favorite !== false,
         confirm: args.confirm === true,
       }),
+  },
+  {
+    name: 'create_favorite_folder',
+    title: '创建收藏夹',
+    description: '创建自己的收藏夹。默认只预览；confirm=true 才创建。名称最多 20 字符，简介最多 200 字符。',
+    annotations: write('创建收藏夹（默认 dry-run）'),
+    inputSchema: schema({
+      title: str('收藏夹名称', { minLength: 1, maxLength: 20 }),
+      intro: str('收藏夹简介', { maxLength: 200 }),
+      privacy: num('0 公开，1 私密', { default: 0, enum: [0, 1] }),
+      confirm: bool('必须为 true 才创建', { default: false }),
+    }, ['title']),
+    handler: async (args, ctx) =>
+      createFavoriteFolder(ctx.client, {
+        title: args.title,
+        intro: args.intro || '',
+        privacy: args.privacy ?? 0,
+        confirm: args.confirm === true,
+      }),
+  },
+  {
+    name: 'edit_favorite_folder',
+    title: '修改收藏夹',
+    description: '修改自己收藏夹的名称、简介或公开状态。默认只预览；confirm=true 才提交。',
+    annotations: write('修改收藏夹（默认 dry-run）'),
+    inputSchema: schema({
+      folder_id: str('收藏夹 media_id'),
+      title: str('新名称；不传则保持', { minLength: 1, maxLength: 20 }),
+      intro: str('新简介；不传则保持', { maxLength: 200 }),
+      privacy: num('0 公开，1 私密；不传则保持', { enum: [0, 1] }),
+      confirm: bool('必须为 true 才提交', { default: false }),
+    }, ['folder_id']),
+    handler: async (args, ctx) =>
+      editFavoriteFolder(ctx.client, {
+        folderId: args.folder_id,
+        title: args.title,
+        intro: args.intro,
+        privacy: args.privacy,
+        confirm: args.confirm === true,
+      }),
+  },
+  {
+    name: 'delete_favorite_folder',
+    title: '删除收藏夹',
+    description: '删除自己的收藏夹，可一次删除多个。默认只预览；confirm=true 才删除。删除不可撤销。',
+    annotations: write('删除收藏夹（默认 dry-run，不可撤销）'),
+    inputSchema: schema({
+      folder_ids: arr('收藏夹 media_id 数组', { items: { type: 'string' }, minItems: 1, maxItems: 20 }),
+      folder_id: str('单个收藏夹 media_id（兼容参数）'),
+      confirm: bool('必须为 true 才删除', { default: false }),
+    }),
+    handler: async (args, ctx) => {
+      if (!args.folder_ids?.length && !args.folder_id) throw new Error('需要提供 folder_ids 或 folder_id');
+      return deleteFavoriteFolder(ctx.client, {
+        folderIds: args.folder_ids || [],
+        folderId: args.folder_id,
+        confirm: args.confirm === true,
+      });
+    },
   },
   {
     name: 'post_comment',
@@ -535,6 +664,30 @@ export const tools = [
         parent: args.parent,
         mentionUserIds: args.mention_user_ids || [],
         imagePaths: args.image_paths || [],
+        confirm: args.confirm === true,
+      });
+    },
+  },
+  {
+    name: 'like_comment',
+    title: '评论点赞 / 取消点赞',
+    description: '给视频或动态评论点赞/取消点赞。默认只预览；confirm=true 才执行。可逆。',
+    annotations: write('评论点赞（默认 dry-run）'),
+    inputSchema: schema({
+      video: videoRef,
+      dynamic_id: str('动态 ID；与 video 二选一'),
+      rpid: str('评论 rpid'),
+      like: bool('true 点赞，false 取消点赞', { default: true }),
+      confirm: bool('必须为 true 才执行', { default: false }),
+    }, ['rpid']),
+    handler: async (args, ctx) => {
+      if (!args.video && !args.dynamic_id) throw new Error('需要提供 video 或 dynamic_id');
+      if (args.video && args.dynamic_id) throw new Error('video 与 dynamic_id 只能提供其中一个');
+      return likeComment(ctx.client, {
+        bvid: args.video,
+        dynamicId: args.dynamic_id,
+        rpid: args.rpid,
+        like: args.like !== false,
         confirm: args.confirm === true,
       });
     },
@@ -580,6 +733,102 @@ export const tools = [
       postDynamic(ctx.client, {
         text: args.text,
         imagePaths: args.image_paths || [],
+        confirm: args.confirm === true,
+      }),
+  },
+  {
+    name: 'delete_dynamic',
+    title: '删除自己的动态',
+    description: '删除当前账号自己的动态。默认只预览；confirm=true 才删除。只能删除自己的动态，删除不可撤销。',
+    annotations: write('删除动态（默认 dry-run）'),
+    inputSchema: schema({
+      dynamic_id: str('要删除的动态 ID'),
+      confirm: bool('必须为 true 才删除', { default: false }),
+    }, ['dynamic_id']),
+    handler: async (args, ctx) =>
+      deleteDynamic(ctx.client, {
+        dynamicId: args.dynamic_id,
+        confirm: args.confirm === true,
+      }),
+  },
+  {
+    name: 'top_dynamic',
+    title: '置顶 / 取消置顶动态',
+    description: '置顶或取消置顶自己的动态。默认只预览；confirm=true 才执行。只能操作自己的动态。',
+    annotations: write('置顶动态（默认 dry-run）'),
+    inputSchema: schema({
+      dynamic_id: str('动态 ID'),
+      top: bool('true 置顶，false 取消置顶', { default: true }),
+      confirm: bool('必须为 true 才执行', { default: false }),
+    }, ['dynamic_id']),
+    handler: async (args, ctx) =>
+      topDynamic(ctx.client, {
+        dynamicId: args.dynamic_id,
+        top: args.top !== false,
+        confirm: args.confirm === true,
+      }),
+  },
+  {
+    name: 'update_profile',
+    title: '修改昵称 / 签名',
+    description:
+      '修改当前账号的昵称或签名。默认只预览；confirm=true 才提交。修改昵称会消耗 6 个硬币，且不可撤销；签名最多 70 字符。',
+    annotations: write('修改个人资料（默认 dry-run）'),
+    inputSchema: schema({
+      nickname: str('新昵称；不传则保持不变'),
+      signature: str('新签名；不传则保持不变；空字符串表示清空', { maxLength: 70 }),
+      confirm: bool('必须为 true 才提交', { default: false }),
+    }),
+    handler: async (args, ctx) => {
+      if (args.nickname === undefined && args.signature === undefined) {
+        throw new Error('需要提供 nickname 或 signature');
+      }
+      return updateProfile(ctx.client, {
+        nickname: args.nickname,
+        signature: args.signature,
+        confirm: args.confirm === true,
+      });
+    },
+  },
+  {
+    name: 'toview_video',
+    title: '添加 / 移除稍后再看',
+    description: '把视频加入或移出“稍后再看”。默认只预览；confirm=true 才执行。可逆。',
+    annotations: write('稍后再看（默认 dry-run）'),
+    inputSchema: schema({
+      video: videoRef,
+      add: bool('true 加入稍后再看，false 移除', { default: true }),
+      confirm: bool('必须为 true 才执行', { default: false }),
+    }, ['video']),
+    handler: async (args, ctx) =>
+      toviewVideo(ctx.client, {
+        bvid: args.video,
+        add: args.add !== false,
+        confirm: args.confirm === true,
+      }),
+  },
+  {
+    name: 'send_danmaku',
+    title: '发送弹幕',
+    description: '发送视频弹幕。默认只预览；confirm=true 才发送。弹幕是公开内容，可能进入审核。',
+    annotations: write('发送弹幕（默认 dry-run）'),
+    inputSchema: schema({
+      video: videoRef,
+      text: str('弹幕内容，最多 100 字', { minLength: 1, maxLength: 100 }),
+      progress: num('出现时间（秒）', { default: 0, minimum: 0 }),
+      color: num('颜色十进制值', { default: 16777215, minimum: 0 }),
+      fontsize: num('字号', { default: 25, minimum: 12, maximum: 64 }),
+      mode: num('模式：1 滚动，4 底部，5 顶部', { default: 1, minimum: 1, maximum: 7 }),
+      confirm: bool('必须为 true 才发送', { default: false }),
+    }, ['video', 'text']),
+    handler: async (args, ctx) =>
+      sendDanmaku(ctx.client, {
+        bvid: args.video,
+        text: args.text,
+        progress: args.progress ?? 0,
+        color: args.color ?? 16777215,
+        fontsize: args.fontsize ?? 25,
+        mode: args.mode ?? 1,
         confirm: args.confirm === true,
       }),
   },

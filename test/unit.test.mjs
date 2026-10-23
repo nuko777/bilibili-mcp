@@ -8,6 +8,7 @@ import { normalizeVideo, parseVideoRef, resolveFrameTimes, formatDuration } from
 import { selectVideoStream } from '../src/media/playurl.mjs';
 import { choosePage } from '../src/api/videos.mjs';
 import { toolMap, validateToolArgs } from '../src/tools/index.mjs';
+import { resolveCommentTarget } from '../src/api/comments.mjs';
 
 const IMG = '7cd084941338484aae1ad9425b84077c';
 const SUB = '4932caff0ff746eab6f01bf08b70ac45';
@@ -155,4 +156,28 @@ test('tool argument validation rejects string booleans and missing required fiel
   const like = toolMap.get('like_video');
   assert.throws(() => validateToolArgs(like, { video: 'BV1xx411c7mD', like: 'false' }), /应为 boolean/);
   assert.throws(() => validateToolArgs(like, {}), /缺少必填参数/);
+});
+
+test('OPUS dynamic resolves its own comment subject', async () => {
+  const fake = {
+    get: async () => ({
+      data: {
+        item: {
+          id_str: '1261344079956934665',
+          type: 'DYNAMIC_TYPE_DRAW',
+          basic: { comment_type: 11, comment_id_str: '412834027', rid_str: '412834027' },
+          modules: {
+            module_author: { mid: '12539868', name: 'tester', pub_ts: '1' },
+            module_dynamic: { major: { opus: { summary: { text: 'hello' } } } },
+          },
+        },
+      },
+    }),
+  };
+  const resolved = await resolveCommentTarget(fake, { dynamicId: '1261344079956934665' });
+  assert.equal(resolved.kind, 'dynamic');
+  assert.equal(resolved.oid, '412834027');
+  assert.equal(resolved.type, 11);
+  assert.equal(resolved.target.comment_oid, '412834027');
+  assert.equal(resolved.target.comment_type, 11);
 });

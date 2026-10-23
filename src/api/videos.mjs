@@ -157,13 +157,24 @@ export async function videoComments(
     like: Number(reply.like) || 0,
     reply_count: Number(reply.rcount) || 0,
     ctime: reply.ctime || 0,
+    state: reply.state ?? null,
     is_up: Boolean(reply.up_action?.like) || reply.mid === view.owner?.mid,
+    mentions: safeArray(reply.content?.members).map((member) => ({
+      mid: String(member.mid || ''),
+      name: member.uname || '',
+      avatar: toHttps(member.avatar || ''),
+    })).filter((member) => member.mid),
     replies: safeArray(reply.replies).map((child) => ({
       rpid: String(child.rpid_str || child.rpid || ''),
       user: child.member?.uname || '',
       message: child.content?.message || '',
       like: Number(child.like) || 0,
       ctime: child.ctime || 0,
+      mentions: safeArray(child.content?.members).map((member) => ({
+        mid: String(member.mid || ''),
+        name: member.uname || '',
+        avatar: toHttps(member.avatar || ''),
+      })).filter((member) => member.mid),
     })),
   }));
   return {

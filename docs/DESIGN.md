@@ -30,7 +30,8 @@ src/server.mjs
 
 - 账号：`auth_status`
 - 榜单：`rank_list`、`popular_list`、`weekly_issues`、`weekly_list`、`precious_list`
-- 视频：`video_info`、`video_transcript`、`video_frames`、`video_comments`、`related_videos`
+- 视频：`video_info`、`video_transcript`、`video_frames`、`related_videos`
+- 评论：`comments`（视频/动态；传 `root` 读取完整楼中楼）
 - 搜索/用户：`search`、`user_info`、`user_videos`
 - 社交：`list_followings`、`list_followers`、`list_favorites`
 - 消息：`notifications`、`messages`
@@ -38,7 +39,7 @@ src/server.mjs
 
 ## 写工具（7）
 
-`like_video`、`coin_video`、`favorite_video`、`post_comment`、`post_dynamic`、`follow_user`、`send_message`。
+`like_video`、`coin_video`、`favorite_video`、`post_comment`（支持 @）、`post_dynamic`、`follow_user`、`send_message`。
 
 全部默认 dry-run；`confirm === true` 才发送写请求。非 GET 请求默认不重试。
 
@@ -53,7 +54,7 @@ src/server.mjs
 | 视频详情 | `/x/web-interface/view` |
 | 字幕 | `/x/player/wbi/v2` |
 | 关键帧 | DASH `playurl` + `ffmpeg`；`/x/player/videoshot` 回退 |
-| 评论 | `/x/v2/reply/wbi/main`、`/x/v2/reply/add` |
+| 评论 | `/x/v2/reply/wbi/main`（视频/动态读取）、`/x/v2/reply/add`（视频/动态写入） |
 | 点赞/投币/收藏 | `/x/web-interface/archive/like`、`coin/add`、`/x/v3/fav/resource/deal` |
 | 动态 | `/x/polymer/web-dynamic/v1/feed/all`、`/x/dynamic/feed/create/dyn` |
 | 图片上传 | `/x/dynamic/feed/draw/upload_bfs` |

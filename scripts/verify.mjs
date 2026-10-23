@@ -4,7 +4,8 @@ import { resolveBootstrapCookies } from '../src/core/config.mjs';
 import { BiliClient } from '../src/core/http.mjs';
 import { authStatus } from '../src/api/account.mjs';
 import { popularList, preciousList, rankList, weeklyIssues, weeklyList } from '../src/api/rankings.mjs';
-import { relatedVideos, search, toviewList, userInfo, userVideos, videoComments, videoInfo, watchHistory } from '../src/api/videos.mjs';
+import { relatedVideos, search, toviewList, userInfo, userVideos, videoInfo, watchHistory } from '../src/api/videos.mjs';
+import { listComments } from '../src/api/comments.mjs';
 import { getTranscript } from '../src/media/subtitles.mjs';
 import { videoFrames } from '../src/media/frames.mjs';
 import { listFavoriteFolders, listFavorites } from '../src/api/favorites.mjs';
@@ -79,9 +80,9 @@ await check('video_frames', async () => {
   if (result.frames.length !== 2) throw new Error(`显式 times 应返回 2 帧，实际 ${result.frames.length}`);
   return `${result.source} ${result.frames.length} frame(s) ${result.frames[0]?.file}`;
 });
-await check('video_comments', async () => {
+await check('comments', async () => {
   if (!bvid) return 'skipped (set BILI_TEST_BVID)';
-  const result = await videoComments(client, { bvid, ps: 3, sort: 'time' });
+  const result = await listComments(client, { bvid, ps: 3, sort: 'time' });
   return `${result.total} comments`;
 });
 await check('related_videos', async () => {

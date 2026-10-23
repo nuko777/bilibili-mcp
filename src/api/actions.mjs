@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { BiliError } from '../core/errors.mjs';
-import { getView } from './videos.mjs';
+import { getView, userInfo } from './videos.mjs';
+import { resolveCommentTarget } from './comments.mjs';
 
 function preview(action, target, details = {}, hint = '未执行任何写操作。将 confirm 设为 true 后才会真正执行。') {
   return {
@@ -191,9 +192,23 @@ async function assertImageBatch(paths) {
   }
 }
 
+async function replyAuthorName(client, { oid, type, root, parent }) {
+  const json = await client.get(
+    'https://api.bilibili.com/x/v2/reply/reply',
+    { oid, type, root: String(root), pn: 1, ps: 49 },
+    { allowCodes: [0, -400], cacheTtl: 0 },
+  );
+  const rootReply = json.data?.root;
+  if (String(parent) === String(root)) return rootReply?.member?.uname || '';
+  const node = (json.data?.replies || []).find(
+    (item) => String(item.rpid_str || item.rpid) === String(parent),
+  );
+  return node?.member?.uname || rootReply?.member?.uname || '';
+}
+
 export async function postComment(
   client,
-  { bvid, aid, message, root, parent, dynamicId, imagePaths = [], confirm = false } = {},
+  { bvid, aid, message, root, parent, dynamicId, imagePaths = [], mentionUserIds = [], confirm = false } = {},
 ) {
   client.requireLogin();
   const text = String(message ?? '').trim();
@@ -201,31 +216,24 @@ export async function postComment(
   if (text.length > 1000) throw new BiliError('评论内容过长（最多 1000 字）', { code: -400 });
   const paths = Array.isArray(imagePaths) ? imagePaths.filter(Boolean) : imagePaths ? [imagePaths] : [];
   if (paths.length > 9) throw new BiliError('评论图片最多 9 张', { code: -400 });
-  if ((bvid || aid) && dynamicId) {
-    throw new BiliError('video 与 dynamic_id 只能提供其中一个', { code: -400 });
-  }
-  if (!bvid && !aid && !dynamicId) {
-    throw new BiliError('需要提供 video 或 dynamic_id', { code: -400 });
-  }
+  const mentionIds = [...new Set((Array.isArray(mentionUserIds) ? mentionUserIds : mentionUserIds ? [mentionUserIds] : []).map(String).filter(Boolean))];
+  if (mentionIds.length > 10) throw new BiliError('单次最多 @ 10 个用户', { code: -400 });
   if (parent && !root) {
     throw new BiliError('提供 parent 时必须同时提供 root', { code: -400, hint: '回复二级评论需要根评论 rpid。' });
   }
 
-  let target;
-  let oid;
-  let type = 1;
-  if (dynamicId) {
-    oid = String(dynamicId);
-    type = 17;
-    target = { dynamic_id: String(dynamicId) };
-  } else {
-    target = await videoTarget(client, { bvid, aid });
-    oid = target.aid;
-  }
+  const resolved = await resolveCommentTarget(client, { bvid, aid, dynamicId });
+  const target = resolved.target;
+  const oid = resolved.oid;
+  const type = resolved.type;
   const details = {
     oid,
     type,
+    comment_oid: oid,
+    comment_type: type,
     message: text,
+    reply_to: root ? String(parent || root) : undefined,
+    mention_user_ids: mentionIds.length ? mentionIds : undefined,
     root: root ? String(root) : undefined,
     parent: parent ? String(parent) : undefined,
     images: paths,
@@ -234,9 +242,50 @@ export async function postComment(
   if (!confirm) return preview('comment', target, details, '评论是公开内容。确认文案后再设 confirm=true。');
   client.requireCsrf();
   await assertImageBatch(paths);
+  const mentions = [];
+  for (const mid of mentionIds) {
+    const user = await userInfo(client, { mid });
+    mentions.push({ mid: String(user.mid || mid), name: user.name });
+  }
+  const atNameToMid = {};
+  const mentionPrefix = mentions
+    .filter((mention) => mention.name)
+    .map((mention) => `@${mention.name} `)
+    .join('');
+  for (const mention of mentions) {
+    const numericMid = Number(mention.mid);
+    atNameToMid[mention.name] = Number.isSafeInteger(numericMid) ? numericMid : mention.mid;
+  }
+  let replyTo = null;
+  let finalMessage = `${mentionPrefix}${text}`;
+  if (root) {
+    replyTo = await replyAuthorName(client, {
+      oid,
+      type,
+      root,
+      parent: parent || root,
+    });
+    if (!replyTo) {
+      throw new BiliError('无法解析被回复评论的作者', {
+        code: -400,
+        hint: '父评论可能已删除；请检查 root/parent。',
+      });
+    }
+    const replyPrefix = `回复 @${replyTo} : `;
+    finalMessage = text.startsWith('回复 @') ? text : `${replyPrefix}${mentionPrefix}${text}`;
+  }
   const pictures = [];
   for (const filePath of paths) pictures.push(await uploadDynamicImage(client, filePath));
-  const form = { oid, type, message: text, csrf: client.csrf, plat: 1, gaia_source: 'main_web' };
+  const form = {
+    oid,
+    type,
+    message: finalMessage,
+    csrf: client.csrf,
+    plat: 1,
+    gaia_source: 'main_web',
+    statistics: JSON.stringify({ appId: 100, platform: 5 }),
+    at_name_to_mid: JSON.stringify(atNameToMid),
+  };
   if (pictures.length) form.pictures = JSON.stringify(pictures);
   if (root) form.root = String(root);
   if (parent) form.parent = String(parent);
@@ -272,6 +321,11 @@ export async function postComment(
     action: 'comment',
     target,
     rpid: rpid ? String(rpid) : null,
+    comment_oid: oid,
+    comment_type: type,
+    message: finalMessage,
+    reply_to: replyTo || undefined,
+    mentions: mentions.length ? mentions : undefined,
     pictures: pictures.length ? pictures : undefined,
     state,
     visible,

@@ -84,6 +84,7 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
     'video_info',
     'video_transcript',
     'video_frames',
+    'comments',
     'like_video',
     'coin_video',
     'favorite_video',

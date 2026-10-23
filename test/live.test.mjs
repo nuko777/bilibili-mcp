@@ -9,12 +9,12 @@ import { popularList, rankList, weeklyIssues, weeklyList } from '../src/api/rank
 import {
   search,
   userInfo,
-  videoComments,
   videoInfo,
   watchHistory,
 } from '../src/api/videos.mjs';
 import { getTranscript } from '../src/media/subtitles.mjs';
 import { videoFrames } from '../src/media/frames.mjs';
+import { listComments } from '../src/api/comments.mjs';
 import { listFavoriteFolders, listFavorites } from '../src/api/favorites.mjs';
 import { listFollowings } from '../src/api/relations.mjs';
 import {
@@ -70,7 +70,7 @@ test('live: video info, tags, subtitle and comments', { skip: !live || !bvid }, 
   assert.equal(transcript.has_subtitle, true, 'test video should have an AI subtitle');
   assert.ok(transcript.text.length > 20);
   assert.ok(transcript.segments.length > 0);
-  const comments = await videoComments(c, { bvid, ps: 3 });
+  const comments = await listComments(c, { bvid, ps: 3 });
   assert.ok(comments.total > 0);
 });
 

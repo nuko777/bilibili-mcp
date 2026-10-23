@@ -6,7 +6,6 @@ import {
   toviewList,
   userInfo,
   userVideos,
-  videoComments,
   videoInfo,
   watchHistory,
 } from '../api/videos.mjs';
@@ -22,6 +21,7 @@ import {
 } from '../api/notifications.mjs';
 import { fetchSessionMessages, listSessions } from '../api/messages.mjs';
 import { dynamicFeed } from '../api/dynamics.mjs';
+import { listComments } from '../api/comments.mjs';
 import { BiliError } from '../core/errors.mjs';
 import {
   coinVideo,
@@ -241,23 +241,33 @@ export const tools = [
     },
   },
   {
-    name: 'video_comments',
-    title: '视频评论',
-    description: '读取视频评论区（热门或按时间），包含评论内容、作者、点赞数与部分回复。',
-    annotations: readOnly('读取视频评论'),
+    name: 'comments',
+    title: '评论区（视频/动态）',
+    description:
+      '读取视频或动态评论区，包含评论内容、作者、点赞数、state、@成员和楼中楼回复。video 与 dynamic_id 二选一；动态评论使用 offset 游标，可用 page 便捷翻页。',
+    annotations: readOnly('读取视频/动态评论'),
     inputSchema: schema({
       video: videoRef,
+      dynamic_id: str('动态 ID；与 video 二选一'),
       page: num('页码', { default: 1, minimum: 1 }),
-      ps: num('每页 1-49', { default: 20, minimum: 1, maximum: 49 }),
+      ps: num('视频评论每页 1-49（动态使用服务端页大小）', { default: 20, minimum: 1, maximum: 49 }),
       sort: str('排序', { enum: ['hot', 'time'], default: 'hot' }),
-    }, ['video']),
-    handler: async (args, ctx) =>
-      videoComments(ctx.client, {
+      offset: str('动态评论游标；传了就按游标读取'),
+      root: str('可选：根评论 rpid；传了就读取该评论的楼中楼回复'),
+    }),
+    handler: async (args, ctx) => {
+      if (!args.video && !args.dynamic_id) throw new Error('需要提供 video 或 dynamic_id');
+      if (args.video && args.dynamic_id) throw new Error('video 与 dynamic_id 只能提供其中一个');
+      return listComments(ctx.client, {
         bvid: args.video,
+        dynamicId: args.dynamic_id,
         page: args.page ?? 1,
         ps: args.ps ?? 20,
         sort: args.sort || 'hot',
-      }),
+        offset: args.offset,
+        root: args.root,
+      });
+    },
   },
   {
     name: 'search',
@@ -510,6 +520,7 @@ export const tools = [
       message: str('评论内容，最多 1000 字', { minLength: 1, maxLength: 1000 }),
       root: str('根评论 rpid（回复二级评论时）'),
       parent: str('父评论 rpid（回复某条评论时）'),
+      mention_user_ids: arr('要显式 @ 的用户 UID 数组，最多 10 个', { items: { type: 'string' }, maxItems: 10 }),
       image_paths: arr('本地图片路径数组，最多 9 张（jpg/png/gif）', { items: { type: 'string' }, maxItems: 9 }),
       confirm: bool('必须为 true 才发布', { default: false }),
     }, ['message']),
@@ -521,6 +532,7 @@ export const tools = [
         dynamicId: args.dynamic_id,
         root: args.root,
         parent: args.parent,
+        mentionUserIds: args.mention_user_ids || [],
         imagePaths: args.image_paths || [],
         confirm: args.confirm === true,
       });

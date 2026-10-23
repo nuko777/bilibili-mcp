@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 12 个离线测试，不需要登录
+npm test          # 13 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -165,7 +165,8 @@ Cookie 文件位置：
 |---|---|
 | 账号 | `auth_status` |
 | 榜单 | `rank_list`、`popular_list`、`weekly_issues`、`weekly_list`、`precious_list` |
-| 视频 | `video_info`、`video_transcript`、`video_frames`、`video_comments`、`related_videos` |
+| 视频 | `video_info`、`video_transcript`、`video_frames`、`related_videos` |
+| 评论 | `comments`（视频/动态，含楼中楼、state、@成员） |
 | 搜索/用户 | `search`、`user_info`、`user_videos` |
 | 社交 | `list_followings`、`list_followers`、`list_favorites` |
 | 消息 | `notifications`、`messages` |
@@ -178,7 +179,7 @@ Cookie 文件位置：
 | `like_video` | 点赞/取消点赞 |
 | `coin_video` | 投币 1–2 枚，可选同时点赞；**不可撤销** |
 | `favorite_video` | 收藏/取消收藏 |
-| `post_comment` | 评论/回复，可选本地图片 |
+| `post_comment` | 视频/动态评论、楼中楼回复、@、可选本地图片 |
 | `post_dynamic` | 发布文本/图片动态 |
 | `follow_user` | 关注/取关 |
 | `send_message` | 发送私信 |
@@ -193,7 +194,10 @@ mcp__bilibili__video_info {"video": "BV1xx411c7mD"}
 mcp__bilibili__video_transcript {"video": "BV1xx411c7mD"}
 mcp__bilibili__video_frames {"video": "BV1xx411c7mD", "times": ["10%", "50%"], "max_images": 2}
 mcp__bilibili__search {"keyword": "DeepSeek R1", "limit": 5}
-mcp__bilibili__post_comment {"video": "BV1xx411c7mD", "message": "测试", "confirm": false}
+mcp__bilibili__comments {"video": "BV1xx411c7mD", "sort": "time"}
+mcp__bilibili__comments {"dynamic_id": "1261344079956934665", "sort": "time"}
+mcp__bilibili__comments {"dynamic_id": "1261344079956934665", "root": "317957957297"}
+mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "测试", "mention_user_ids": ["3747573468761409"], "confirm": false}
 ```
 
 分页约定：
@@ -217,7 +221,7 @@ mcp__bilibili__post_comment {"video": "BV1xx411c7mD", "message": "测试", "conf
 ## 测试
 
 ```bash
-npm test          # 12 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 13 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -288,6 +292,10 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 ### Unreleased
 
+- 修复 OPUS 动态评论主体：使用 `basic.comment_type` / `basic.comment_id_str`，不再硬编码 `type=17 + 动态ID`
+- `post_comment` 支持 `mention_user_ids`，发送 `at_name_to_mid`，显式 @ 用户
+- 楼中楼回复自动生成 `回复 @父评论作者 : 正文` 格式；`comments` 支持 `root` 读取完整楼中楼
+- `video_comments` 泛化为 `comments`，支持视频/动态、楼中楼、state 与 @成员；传 `root` 读取完整楼中楼
 - 查看/发送弹幕
 - 删除自己的评论/动态
 - 置顶/取消置顶自己的动态

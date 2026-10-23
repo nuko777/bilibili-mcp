@@ -1,4 +1,5 @@
 import { safeArray, toHttps, truncate } from '../core/format.mjs';
+import { BiliError } from '../core/errors.mjs';
 
 function normalizeAuthor(author) {
   if (!author) return null;
@@ -96,6 +97,24 @@ export function normalizeDynamic(item) {
     visible: item.visible !== false,
     is_forward: item.type === 'DYNAMIC_TYPE_FORWARD',
   };
+}
+
+export async function getDynamicDetail(client, dynamicId) {
+  if (!dynamicId) throw new BiliError('需要动态 ID', { code: -400 });
+  const json = await client.get(
+    'https://api.bilibili.com/x/polymer/web-dynamic/v1/detail',
+    { id: String(dynamicId), features: 'itemOpusStyle' },
+    { cacheTtl: 5 * 60_000 },
+  );
+  const item = json.data?.item;
+  if (!item) {
+    throw new BiliError('无法获取动态详情（可能已删除或不可见）', {
+      code: json.code,
+      endpoint: '/x/polymer/web-dynamic/v1/detail',
+      details: json,
+    });
+  }
+  return item;
 }
 
 const FEED_CACHE_TTL = 2 * 60_000;

@@ -20,7 +20,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
    - 默认 3 帧（15%/50%/85%）；
    - 可传 `times: ["0:30","1:20","50%"]`；
    - 工具会返回图片；直接看图片描述画面、字幕、场景。
-4. 需要观众反馈：`mcp__bilibili__video_comments`（先看热门，必要时按时间）。
+4. 需要观众反馈：`mcp__bilibili__comments`（视频传 `video`，动态传 `dynamic_id`；先看热门，必要时按时间；传 `root` 可读完整楼中楼）。
 5. 需要关联内容：`mcp__bilibili__related_videos`。
 
 回答要求：
@@ -52,6 +52,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - 用户明确同意后，再带 `confirm: true` 调用；
 - `coin_video` **不可撤销**，执行前必须确认数量和余额；
 - `post_comment`、`post_dynamic`、`send_message` 是公开/对外行为，先复述文案；
+- 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；回复评论继续用 `root`/`parent`，工具会自动生成 `回复 @父作者 : 正文`。
 - `like_video`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；
 - 收藏需要 `folder_id`：先调 `list_favorites` 不带 folder_id，拿到收藏夹列表。
 

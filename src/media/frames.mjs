@@ -94,11 +94,16 @@ export async function videoFrames(
   const duration = selected.duration || Number(view.duration) || 0;
   const requestedCount = count === undefined || count === null ? null : Math.trunc(Number(count));
   if (type === 'grid') {
+    const rawTimeCount = Array.isArray(times)
+      ? times.length
+      : typeof times === 'string' && times.trim()
+        ? times.split(',').filter((part) => part.trim()).length
+        : 0;
     return videoGrid(client, {
       bvid,
       aid,
       times,
-      count: requestedCount ?? 9,
+      count: requestedCount ?? (rawTimeCount || 9),
       frameHeight,
       labels,
       page,
@@ -238,7 +243,7 @@ export async function framesAsImages(frames, { limit = 4 } = {}) {
 
 function gridTimes({ times, cells, duration }) {
   if (times !== undefined && times !== null && times !== '') {
-    let resolved = resolveFrameTimes({ times, count: cells, duration });
+    let resolved = resolveFrameTimes({ times, count: cells, duration, maxTimes: cells });
     if (resolved.length > cells) resolved = resolved.slice(0, cells);
     if (resolved.length < cells) {
       for (let index = 0; index < cells && resolved.length < cells; index += 1) {

@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 13 个离线测试，不需要登录
+npm test          # 15 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -301,7 +301,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 13 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 15 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -384,6 +384,15 @@ Cookie 等价于账号密码。
 如果发现安全问题，请通过仓库 issue 或维护者公开联系方式报告，不要在 issue 中粘贴 Cookie、SESSDATA、bili_jct 或完整请求头。
 
 ## Changelog
+
+### Unreleased
+
+- 修复 `video_frames` 九宫格的 `times`/`count` 语义：显式时间不再被 12 个上限截断；不传 `count` 时按 `times` 数量推断
+- 修复 `edit_favorite_folder` 未显式传 `privacy` 时的预览语义，避免把内部 `attr` 当作公开/私密状态
+- 发布/删除/置顶动态后清理动态流游标，避免自己的动态流短时间不更新
+- 楼中楼子回复补充 `state` / `is_up`
+- MCP `serverInfo.version` 改为读取 `package.json`
+- 增加九宫格时间上限、子回复状态回归测试
 
 ### 0.1.0-beta.3 — 2026-10-24
 

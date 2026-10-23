@@ -1,5 +1,12 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 export const SERVER_NAME = 'bilibili-mcp';
-export const SERVER_VERSION = '0.1.0';
+const packageJson = JSON.parse(
+  readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf8'),
+);
+export const SERVER_VERSION = packageJson.version;
 
 export function jsonrpcResult(id, result) {
   return { jsonrpc: '2.0', id, result };

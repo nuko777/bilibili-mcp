@@ -4,7 +4,7 @@ import path from 'node:path';
 import { BiliError } from '../core/errors.mjs';
 import { getView, userInfo } from './videos.mjs';
 import { resolveCommentTarget } from './comments.mjs';
-import { getDynamicDetail, normalizeDynamic } from './dynamics.mjs';
+import { getDynamicDetail, normalizeDynamic, resetDynamicFeedCursors } from './dynamics.mjs';
 import { accountInfo } from './account.mjs';
 import { listFavoriteFolders } from './favorites.mjs';
 
@@ -301,9 +301,9 @@ export async function editFavoriteFolder(
   const current = await findFavoriteFolder(client, folderId);
   const nextTitle = title === undefined ? current.title : String(title).trim();
   const nextIntro = intro === undefined ? current.intro : String(intro);
-  const nextPrivacy = privacy === undefined ? (Number(current.privacy) === 0 ? 0 : 1) : Number(privacy);
+  const nextPrivacy = privacy === undefined ? null : Number(privacy);
   const nextCover = cover === undefined ? current.cover : String(cover || '');
-  validateFolderFields({ title: nextTitle, intro: nextIntro, privacy: nextPrivacy });
+  validateFolderFields({ title: nextTitle, intro: nextIntro, privacy: nextPrivacy ?? undefined });
   const target = favoriteFolderTarget(client);
   const details = {
     folder_id: String(folderId),
@@ -312,7 +312,8 @@ export async function editFavoriteFolder(
     current_intro: current.intro,
     next_intro: nextIntro,
     current_privacy: current.privacy,
-    next_privacy: nextPrivacy,
+    next_privacy: nextPrivacy === null ? current.privacy : nextPrivacy,
+    privacy_changed: nextPrivacy !== null,
   };
   if (!confirm) return preview('edit_favorite_folder', target, details);
   client.requireCsrf();
@@ -323,7 +324,7 @@ export async function editFavoriteFolder(
     cover: nextCover,
     csrf: client.csrf,
   };
-  if (privacy !== undefined) form.privacy = nextPrivacy;
+  if (nextPrivacy !== null) form.privacy = nextPrivacy;
   const result = await client.postForm(
     'https://api.bilibili.com/x/v3/fav/folder/edit',
     form,
@@ -682,6 +683,8 @@ export async function postDynamic(client, { text, imagePaths = [], confirm = fal
     { retry: 0 },
   );
   const dynamicId = result.data?.dyn_id_str || result.data?.dyn_id || result.data?.dynamic_id_str || null;
+  client.clearCache?.();
+  resetDynamicFeedCursors();
   return {
     ok: result.code === 0,
     action: 'publish_dynamic',
@@ -715,6 +718,7 @@ export async function topDynamic(client, { dynamicId, top = true, confirm = fals
     { retry: 0, referer: `https://space.bilibili.com/${client.uid}/dynamic` },
   );
   client.clearCache?.();
+  resetDynamicFeedCursors();
   return {
     ok: result.code === 0,
     action: desired ? 'top_dynamic' : 'untop_dynamic',
@@ -820,6 +824,7 @@ export async function deleteDynamic(client, { dynamicId, confirm = false } = {})
     { retry: 0, referer: `https://www.bilibili.com/opus/${dynamicId}` },
   );
   client.clearCache?.();
+  resetDynamicFeedCursors();
   return {
     ok: result.code === 0,
     action: 'delete_dynamic',

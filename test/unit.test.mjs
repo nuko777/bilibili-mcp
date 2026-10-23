@@ -8,7 +8,7 @@ import { normalizeVideo, parseVideoRef, resolveFrameTimes, formatDuration } from
 import { selectVideoStream } from '../src/media/playurl.mjs';
 import { choosePage } from '../src/api/videos.mjs';
 import { toolMap, validateToolArgs } from '../src/tools/index.mjs';
-import { resolveCommentTarget } from '../src/api/comments.mjs';
+import { normalizeReply, resolveCommentTarget } from '../src/api/comments.mjs';
 
 const IMG = '7cd084941338484aae1ad9425b84077c';
 const SUB = '4932caff0ff746eab6f01bf08b70ac45';
@@ -180,4 +180,36 @@ test('OPUS dynamic resolves its own comment subject', async () => {
   assert.equal(resolved.type, 11);
   assert.equal(resolved.target.comment_oid, '412834027');
   assert.equal(resolved.target.comment_type, 11);
+});
+
+test('grid time resolution supports up to 81 explicit times', () => {
+  const times = Array.from({ length: 81 }, (_, index) => index);
+  const resolved = resolveFrameTimes({ times, duration: 100, maxTimes: 81 });
+  assert.equal(resolved.length, 81);
+  assert.equal(resolved[80], 80);
+  assert.equal(resolveFrameTimes({ times, duration: 100 }).length, 12);
+});
+
+test('child comment replies keep state and is_up', () => {
+  const reply = normalizeReply(
+    {
+      rpid_str: '1',
+      member: { mid: 100, uname: 'root' },
+      content: { message: 'root' },
+      state: 0,
+      replies: [
+        {
+          rpid_str: '2',
+          member: { mid: 200, uname: 'child' },
+          content: { message: 'child' },
+          state: 17,
+        },
+      ],
+    },
+    { ownerMid: '100' },
+  );
+  assert.equal(reply.state, 0);
+  assert.equal(reply.is_up, true);
+  assert.equal(reply.replies[0].state, 17);
+  assert.equal(reply.replies[0].is_up, false);
 });

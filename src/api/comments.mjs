@@ -25,6 +25,8 @@ export function normalizeReply(reply, { ownerMid = '' } = {}) {
     message: child.content?.message || '',
     like: Number(child.like) || 0,
     ctime: child.ctime || 0,
+    state: child.state ?? null,
+    is_up: Boolean(ownerMid && String(child.member?.mid || '') === String(ownerMid)),
     mentions: safeArray(child.content?.members).map(normalizeMember).filter(Boolean),
   }));
   return {

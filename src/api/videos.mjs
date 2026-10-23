@@ -170,6 +170,8 @@ export async function videoComments(
       message: child.content?.message || '',
       like: Number(child.like) || 0,
       ctime: child.ctime || 0,
+      state: child.state ?? null,
+      is_up: String(child.member?.mid || '') === String(view.owner?.mid || ''),
       mentions: safeArray(child.content?.members).map((member) => ({
         mid: String(member.mid || ''),
         name: member.uname || '',

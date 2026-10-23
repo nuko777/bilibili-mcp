@@ -152,6 +152,11 @@ function formatFeed(json, { type, page = null, offset = '' } = {}) {
   };
 }
 
+export function resetDynamicFeedCursors() {
+  feedCursors.clear();
+  spaceFeedCursors.clear();
+}
+
 export async function dynamicFeed(client, { page = 1, offset, type = 'all' } = {}) {
   const feedType = type || 'all';
   const explicitOffset = offset !== undefined && offset !== null && String(offset).trim() !== '';

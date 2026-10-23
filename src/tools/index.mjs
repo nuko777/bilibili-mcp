@@ -230,7 +230,7 @@ export const tools = [
     }, ['video']),
     handler: async (args, ctx) => {
       const type = args.type || 'frames';
-      const count = args.count ?? (type === 'grid' ? 9 : 3);
+      const count = args.count;
       if (type === 'frames' && count > 6) {
         throw new Error('frames 模式 count 最多 6；需要更多请传 type="grid"');
       }

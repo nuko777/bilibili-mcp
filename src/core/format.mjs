@@ -153,8 +153,9 @@ export function parseTimeExpression(expression, duration) {
   return Math.max(0, duration ? Math.min(seconds, duration) : seconds);
 }
 
-export function resolveFrameTimes({ times, count = 3, duration = 0 } = {}) {
-  const safeCount = Math.max(1, Math.min(Number(count) || 3, 12));
+export function resolveFrameTimes({ times, count = 3, duration = 0, maxTimes = 12 } = {}) {
+  const cap = Math.max(1, Math.min(Number(maxTimes) || 12, 100));
+  const safeCount = Math.max(1, Math.min(Number(count) || 3, cap));
   const explicit = times !== undefined && times !== null && times !== '';
   let expressions = times;
   if (typeof expressions === 'string' && expressions.includes(',')) {
@@ -166,7 +167,7 @@ export function resolveFrameTimes({ times, count = 3, duration = 0 } = {}) {
   }
   if (!Array.isArray(expressions)) expressions = [expressions];
   if (explicit && !expressions.length) throw new Error('times 不能为空数组');
-  const limit = explicit ? Math.min(expressions.length, 12) : safeCount;
+  const limit = explicit ? Math.min(expressions.length, cap) : safeCount;
   const resolved = expressions.slice(0, limit).map((expression) => parseTimeExpression(expression, duration));
   return [...new Set(resolved.map((value) => Math.round(value * 1000) / 1000))].sort((a, b) => a - b);
 }

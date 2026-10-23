@@ -295,6 +295,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 修复 OPUS 动态评论主体：使用 `basic.comment_type` / `basic.comment_id_str`，不再硬编码 `type=17 + 动态ID`
 - `post_comment` 支持 `mention_user_ids`，发送 `at_name_to_mid`，显式 @ 用户
 - 楼中楼回复自动生成 `回复 @父评论作者 : 正文` 格式；`comments` 支持 `root` 读取完整楼中楼
+- 修复视频评论 `state=17`：评论写请求的 Referer 对齐视频/OPUS 页面 URL，而不是默认首页
 - `video_comments` 泛化为 `comments`，支持视频/动态、楼中楼、state 与 @成员；传 `root` 读取完整楼中楼
 - 查看/发送弹幕
 - 删除自己的评论/动态

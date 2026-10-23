@@ -54,7 +54,7 @@ src/server.mjs
 | 视频详情 | `/x/web-interface/view` |
 | 字幕 | `/x/player/wbi/v2` |
 | 关键帧 | DASH `playurl` + `ffmpeg`；`/x/player/videoshot` 回退 |
-| 评论 | `/x/v2/reply/wbi/main`（视频/动态读取）、`/x/v2/reply/add`（视频/动态写入） |
+| 评论 | `/x/v2/reply/wbi/main`（视频/动态读取）、`/x/v2/reply/add`（视频/动态写入；Referer 对齐内容页） |
 | 点赞/投币/收藏 | `/x/web-interface/archive/like`、`coin/add`、`/x/v3/fav/resource/deal` |
 | 动态 | `/x/polymer/web-dynamic/v1/feed/all`、`/x/dynamic/feed/create/dyn` |
 | 图片上传 | `/x/dynamic/feed/draw/upload_bfs` |
@@ -68,6 +68,7 @@ src/server.mjs
 - WBI：`wts` + `w_rid`；签名和最终 query 使用同一个编码函数，避免 `%20` / `+` 与 `!'()*` 二次编码不一致。
 - 图片上传：手写 multipart 并显式设置 `Content-Length`；Node `FormData` 的 chunked 编码会被 B站 CSRF 解析拒绝。
 - 评论带图：`pictures` 字段是 JSON 字符串；图片走同一个 BFS 上传接口。
+- 评论写入：视频评论的 `Referer` 必须是视频页 URL；用默认首页会被判为低信任请求并进入 `state=17`。
 
 ## 分页
 

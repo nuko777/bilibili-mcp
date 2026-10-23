@@ -289,7 +289,14 @@ export async function postComment(
   if (pictures.length) form.pictures = JSON.stringify(pictures);
   if (root) form.root = String(root);
   if (parent) form.parent = String(parent);
-  const result = await client.postForm('https://api.bilibili.com/x/v2/reply/add', form, { retry: 0 });
+  const referer =
+    resolved.kind === 'video'
+      ? `https://www.bilibili.com/video/${target.bvid}/`
+      : `https://www.bilibili.com/opus/${target.dynamic_id}`;
+  const result = await client.postForm('https://api.bilibili.com/x/v2/reply/add', form, {
+    retry: 0,
+    referer,
+  });
   const rpid = result.data?.rpid_str || result.data?.rpid || null;
   let state = null;
   let visible = null;

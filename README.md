@@ -243,7 +243,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.1`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.1)（prerelease，含 npm tarball）。
+已发布：[`v0.1.0-beta.2`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.2)（prerelease，含 npm tarball）。
 
 ## 后续计划
 

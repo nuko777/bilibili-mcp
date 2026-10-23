@@ -231,7 +231,7 @@ export async function favoriteVideo(
     target,
     folder_id: requestedFolderIds[0],
     folder_ids: requestedFolderIds,
-    result: result.data || { code: result.code, message: result.message },
+    result: { code: result.code, message: result.message },
   };
 }
 

@@ -335,7 +335,6 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 ## 已知限制
 
 - `videoshot` 回退依赖 ffmpeg；未安装 ffmpeg 时返回整张雪碧图，不裁切单帧。
-- 视频语音转文字、视频投稿在后续计划中，当前版本尚未提供。
 - B 站接口可能随时调整；端点集中在 `src/api/*`，错误会带原始 `code` 便于更新。
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
 
@@ -395,6 +394,8 @@ Cookie 等价于账号密码。
 - MCP `serverInfo.version` 改为读取 `package.json`
 - 增加九宫格时间上限、子回复状态回归测试
 - 图片评论：上传 Referer 对齐内容页，`pictures` 带 `ai_gen_pic`，读取评论返回 `pictures`；`post_comment` 支持 `sync_to_dynamic`
+- 收藏夹写操作只返回可靠的 `code/message`，不再暴露无意义的 `success_num`
+- 更新 skill 的描述/触发范围，清理 README 重复限制
 
 ### 0.1.0-beta.3 — 2026-10-24
 

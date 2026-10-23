@@ -385,25 +385,6 @@ Cookie 等价于账号密码。
 
 ## Changelog
 
-### 0.1.0-beta.2 — 2026-10-21
-
-- GitHub Actions `Release` workflow：打 tag 后自动测试、打包、创建 GitHub Release，并通过仓库 secret `NPM_TOKEN` 发布到 npm（已用 `v0.1.0-beta.2` 验证）
-- 补充 release 流程、npm beta 安装说明和版本化 Changelog
-
-### 0.1.0-beta.1 — 2026-10-21
-
-首个公开 beta 版本，npm dist-tag `beta`。
-
-- 29 个 MCP 工具：22 个只读 + 7 个写操作
-- 排行榜、综合热门、每周必看、入站必刷
-- 视频详情、AI 字幕、关键帧截图、评论、相关推荐
-- 搜索、用户信息/投稿、关注/粉丝、收藏夹、通知、私信、动态流、历史、稍后再看
-- 点赞、投币、收藏、评论/回复/带图评论、文本/带图动态、关注、私信
-- 写操作默认 dry-run，`confirm=true` 才执行；非 GET 请求默认不自动重试
-- WBI 签名与最终 query 使用同一编码器；支持带空格/特殊字符的搜索
-- 工具参数运行时校验；Cookie 文件 mtime 热重载；图片魔数/大小/文件名检查
-- 修复评论 `state=17` 的可见性提示、图片上传 multipart、CSRF 字段、分页和标签完整性等问题
-
 ### 0.1.0-beta.3 — 2026-10-24
 
 - 修复 OPUS 动态评论主体：使用 `basic.comment_type` / `basic.comment_id_str`，不再硬编码 `type=17 + 动态ID`
@@ -423,6 +404,25 @@ Cookie 等价于账号密码。
 - 新增 `danmaku` / `send_danmaku`：读取和发送视频弹幕，发送默认 dry-run
 - `video_frames` 支持 `type:"grid"`：每 9 帧拼一张，最多 9 张；最后一张自动接近正方形并留黑位，单帧 720p、保持原比例，可用 `times` 指定格子时间
 - `video_comments` 泛化为 `comments`，支持视频/动态、楼中楼、state 与 @成员；传 `root` 读取完整楼中楼
+
+### 0.1.0-beta.2 — 2026-10-21
+
+- GitHub Actions `Release` workflow：打 tag 后自动测试、打包、创建 GitHub Release，并通过仓库 secret `NPM_TOKEN` 发布到 npm（已用 `v0.1.0-beta.2` 验证）
+- 补充 release 流程、npm beta 安装说明和版本化 Changelog
+
+### 0.1.0-beta.1 — 2026-10-21
+
+首个公开 beta 版本，npm dist-tag `beta`。
+
+- 29 个 MCP 工具：22 个只读 + 7 个写操作
+- 排行榜、综合热门、每周必看、入站必刷
+- 视频详情、AI 字幕、关键帧截图、评论、相关推荐
+- 搜索、用户信息/投稿、关注/粉丝、收藏夹、通知、私信、动态流、历史、稍后再看
+- 点赞、投币、收藏、评论/回复/带图评论、文本/带图动态、关注、私信
+- 写操作默认 dry-run，`confirm=true` 才执行；非 GET 请求默认不自动重试
+- WBI 签名与最终 query 使用同一编码器；支持带空格/特殊字符的搜索
+- 工具参数运行时校验；Cookie 文件 mtime 热重载；图片魔数/大小/文件名检查
+- 修复评论 `state=17` 的可见性提示、图片上传 multipart、CSRF 字段、分页和标签完整性等问题
 
 ## 目录
 

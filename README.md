@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-GitHub Release `v0.1.0-beta.3` 已发布；npm `beta.3` 发布待完成（当前 token 无权限）：
+已发布 `0.1.0-beta.3`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -210,7 +210,6 @@ src/server.mjs
 - 动态流使用 `offset` 游标；`user_dynamics` / `dynamic_feed` 的 `page` 是便捷封装。
 - 其他列表使用 `page` / `ps` / `limit`；服务端对页码做整数截断。
 - 标签补齐默认前 20 条，失败时返回 `tags_complete=false`。
-- 评论可能进入 `state=17`（审核中/仅自己可见）；工具返回 `state`、`visible`、`visibility_unknown`，但无法绕过审核。
 - 视频评论写入的 Referer 已对齐视频页；OPUS 评论主体从 `basic.comment_type` / `basic.comment_id_str` 解析。
 
 ### 关键帧
@@ -324,7 +323,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-GitHub Release：[`v0.1.0-beta.3`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.3)（prerelease，含 npm tarball）。npm `beta.3` 发布待完成。
+已发布：[`v0.1.0-beta.3`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.3)（prerelease，含 npm tarball）。
 
 ## 后续计划
 
@@ -334,7 +333,6 @@ GitHub Release：[`v0.1.0-beta.3`](https://github.com/nuko777/bilibili-mcp/relea
 
 ## 已知限制
 
-- 评论可能进入 `state=17`（审核中/仅自己可见）；工具会返回 `state`/`visible`/`visibility_unknown`，但无法绕过审核。
 - `videoshot` 回退依赖 ffmpeg；未安装 ffmpeg 时返回整张雪碧图，不裁切单帧。
 - 视频语音转文字、视频投稿在后续计划中，当前版本尚未提供。
 - B 站接口可能随时调整；端点集中在 `src/api/*`，错误会带原始 `code` 便于更新。

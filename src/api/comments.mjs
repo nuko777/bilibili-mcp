@@ -7,6 +7,15 @@ const COMMENT_PAGE_SIZE = 20;
 const COMMENT_CACHE_TTL = 2 * 60_000;
 const dynamicCommentCursors = new Map();
 
+function normalizePictures(content) {
+  return safeArray(content?.pictures).map((pic) => ({
+    url: toHttps(pic.img_src || pic.url || ''),
+    width: Number(pic.img_width || pic.width) || 0,
+    height: Number(pic.img_height || pic.height) || 0,
+    size: Number(pic.img_size || pic.size) || 0,
+  })).filter((pic) => pic.url);
+}
+
 function normalizeMember(member) {
   if (!member) return null;
   return {
@@ -27,6 +36,7 @@ export function normalizeReply(reply, { ownerMid = '' } = {}) {
     ctime: child.ctime || 0,
     state: child.state ?? null,
     is_up: Boolean(ownerMid && String(child.member?.mid || '') === String(ownerMid)),
+    pictures: normalizePictures(child.content),
     mentions: safeArray(child.content?.members).map(normalizeMember).filter(Boolean),
   }));
   return {
@@ -42,6 +52,7 @@ export function normalizeReply(reply, { ownerMid = '' } = {}) {
     ctime: reply.ctime || 0,
     state: reply.state ?? null,
     is_up: Boolean(ownerMid && String(reply.member?.mid || '') === String(ownerMid)),
+    pictures: normalizePictures(reply.content),
     mentions: safeArray(reply.content?.members).map(normalizeMember).filter(Boolean),
     replies: childReplies,
   };

@@ -404,7 +404,7 @@ async function replyAuthorName(client, { oid, type, root, parent }) {
 
 export async function postComment(
   client,
-  { bvid, aid, message, root, parent, dynamicId, imagePaths = [], mentionUserIds = [], confirm = false } = {},
+  { bvid, aid, message, root, parent, dynamicId, imagePaths = [], mentionUserIds = [], syncToDynamic = false, confirm = false } = {},
 ) {
   client.requireLogin();
   const text = String(message ?? '').trim();
@@ -433,6 +433,7 @@ export async function postComment(
     root: root ? String(root) : undefined,
     parent: parent ? String(parent) : undefined,
     images: paths,
+    sync_to_dynamic: Boolean(syncToDynamic),
     warning: '评论会公开发布，且会以当前账号身份出现。',
   };
   if (!confirm) return preview('comment', target, details, '评论是公开内容。确认文案后再设 confirm=true。');
@@ -470,8 +471,14 @@ export async function postComment(
     const replyPrefix = `回复 @${replyTo} : `;
     finalMessage = text.startsWith('回复 @') ? text : `${replyPrefix}${mentionPrefix}${text}`;
   }
+  const referer =
+    resolved.kind === 'video'
+      ? `https://www.bilibili.com/video/${target.bvid}/`
+      : `https://www.bilibili.com/opus/${target.dynamic_id}`;
   const pictures = [];
-  for (const filePath of paths) pictures.push(await uploadDynamicImage(client, filePath));
+  for (const filePath of paths) {
+    pictures.push(await uploadDynamicImage(client, filePath, { referer }));
+  }
   const form = {
     oid,
     type,
@@ -483,12 +490,9 @@ export async function postComment(
     at_name_to_mid: JSON.stringify(atNameToMid),
   };
   if (pictures.length) form.pictures = JSON.stringify(pictures);
+  if (syncToDynamic) form.sync_to_dynamic = 1;
   if (root) form.root = String(root);
   if (parent) form.parent = String(parent);
-  const referer =
-    resolved.kind === 'video'
-      ? `https://www.bilibili.com/video/${target.bvid}/`
-      : `https://www.bilibili.com/opus/${target.dynamic_id}`;
   const result = await client.postForm('https://api.bilibili.com/x/v2/reply/add', form, {
     retry: 0,
     referer,
@@ -544,7 +548,7 @@ export async function postComment(
   };
 }
 
-async function uploadDynamicImage(client, filePath) {
+async function uploadDynamicImage(client, filePath, { referer = 'https://t.bilibili.com/' } = {}) {
   const ext = path.extname(filePath).toLowerCase();
   if (!['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
     throw new BiliError(`不支持的图片格式：${ext || '(无扩展名)'}`, {
@@ -593,7 +597,7 @@ async function uploadDynamicImage(client, filePath) {
       'Content-Type': `multipart/form-data; boundary=${boundary}`,
       'Content-Length': String(body.length),
     },
-    referer: 'https://t.bilibili.com/',
+    referer,
     retry: 0,
   });
   const image = result.data;
@@ -603,6 +607,7 @@ async function uploadDynamicImage(client, filePath) {
     img_width: image.image_width,
     img_height: image.image_height,
     img_size: image.img_size,
+    ai_gen_pic: Number(image.ai_gen_pic) || 0,
   };
 }
 

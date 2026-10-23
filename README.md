@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 15 个离线测试，不需要登录
+npm test          # 16 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -246,7 +246,7 @@ src/server.mjs
 | `create_favorite_folder` | 创建收藏夹 |
 | `edit_favorite_folder` | 修改收藏夹名称/简介/公开状态 |
 | `delete_favorite_folder` | 删除一个或多个收藏夹 |
-| `post_comment` | 视频/动态评论、楼中楼回复、@、可选本地图片 |
+| `post_comment` | 视频/动态评论、楼中楼回复、@、可选本地图片、可同时转发动态 |
 | `delete_comment` | 删除自己的视频/动态评论；不可撤销 |
 | `delete_dynamic` | 删除自己的动态；不可撤销 |
 | `top_dynamic` | 置顶/取消置顶自己的动态 |
@@ -276,6 +276,7 @@ mcp__bilibili__user_dynamics {}
 mcp__bilibili__video_frames {"video": "BV1dan166EHf", "type": "grid", "count": 9, "frame_height": 720}
 mcp__bilibili__favorite_video {"video": "BV1dan166EHf", "folder_ids": ["4267463668", "4367445368"], "confirm": false}
 mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "测试", "mention_user_ids": ["3747573468761409"], "confirm": false}
+mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "图片评论测试", "image_paths": ["D:/path/test.jpg"], "sync_to_dynamic": true, "confirm": false}
 ```
 
 分页约定：
@@ -301,7 +302,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 15 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 16 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -393,6 +394,7 @@ Cookie 等价于账号密码。
 - 楼中楼子回复补充 `state` / `is_up`
 - MCP `serverInfo.version` 改为读取 `package.json`
 - 增加九宫格时间上限、子回复状态回归测试
+- 图片评论：上传 Referer 对齐内容页，`pictures` 带 `ai_gen_pic`，读取评论返回 `pictures`；`post_comment` 支持 `sync_to_dynamic`
 
 ### 0.1.0-beta.3 — 2026-10-24
 

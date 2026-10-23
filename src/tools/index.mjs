@@ -652,6 +652,7 @@ export const tools = [
       parent: str('父评论 rpid（回复某条评论时）'),
       mention_user_ids: arr('要显式 @ 的用户 UID 数组，最多 10 个', { items: { type: 'string' }, maxItems: 10 }),
       image_paths: arr('本地图片路径数组，最多 9 张（jpg/png/gif）', { items: { type: 'string' }, maxItems: 9 }),
+      sync_to_dynamic: bool('发布动态评论时同时转发到我的动态', { default: false }),
       confirm: bool('必须为 true 才发布', { default: false }),
     }, ['message']),
     handler: async (args, ctx) => {
@@ -664,6 +665,7 @@ export const tools = [
         parent: args.parent,
         mentionUserIds: args.mention_user_ids || [],
         imagePaths: args.image_paths || [],
+        syncToDynamic: args.sync_to_dynamic === true,
         confirm: args.confirm === true,
       });
     },
@@ -733,6 +735,7 @@ export const tools = [
       postDynamic(ctx.client, {
         text: args.text,
         imagePaths: args.image_paths || [],
+        syncToDynamic: args.sync_to_dynamic === true,
         confirm: args.confirm === true,
       }),
   },

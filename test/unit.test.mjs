@@ -213,3 +213,18 @@ test('child comment replies keep state and is_up', () => {
   assert.equal(reply.replies[0].state, 17);
   assert.equal(reply.replies[0].is_up, false);
 });
+
+test('comment pictures are normalized', () => {
+  const reply = normalizeReply({
+    rpid_str: '9',
+    member: { mid: 1, uname: 'u' },
+    content: {
+      message: 'image',
+      pictures: [{ img_src: '//i0.hdslb.com/a.jpg', img_width: 320, img_height: 180, img_size: 1.5 }],
+    },
+    state: 0,
+  });
+  assert.equal(reply.pictures[0].url, 'https://i0.hdslb.com/a.jpg');
+  assert.equal(reply.pictures[0].width, 320);
+  assert.equal(reply.pictures[0].height, 180);
+});

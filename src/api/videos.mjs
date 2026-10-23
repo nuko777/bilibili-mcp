@@ -159,6 +159,12 @@ export async function videoComments(
     ctime: reply.ctime || 0,
     state: reply.state ?? null,
     is_up: Boolean(reply.up_action?.like) || reply.mid === view.owner?.mid,
+    pictures: safeArray(reply.content?.pictures).map((pic) => ({
+      url: toHttps(pic.img_src || pic.url || ''),
+      width: Number(pic.img_width || pic.width) || 0,
+      height: Number(pic.img_height || pic.height) || 0,
+      size: Number(pic.img_size || pic.size) || 0,
+    })).filter((pic) => pic.url),
     mentions: safeArray(reply.content?.members).map((member) => ({
       mid: String(member.mid || ''),
       name: member.uname || '',
@@ -172,6 +178,12 @@ export async function videoComments(
       ctime: child.ctime || 0,
       state: child.state ?? null,
       is_up: String(child.member?.mid || '') === String(view.owner?.mid || ''),
+      pictures: safeArray(child.content?.pictures).map((pic) => ({
+        url: toHttps(pic.img_src || pic.url || ''),
+        width: Number(pic.img_width || pic.width) || 0,
+        height: Number(pic.img_height || pic.height) || 0,
+        size: Number(pic.img_size || pic.size) || 0,
+      })).filter((pic) => pic.url),
       mentions: safeArray(child.content?.members).map((member) => ({
         mid: String(member.mid || ''),
         name: member.uname || '',

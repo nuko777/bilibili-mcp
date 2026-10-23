@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.3`（npm dist-tag：`beta`）：
+GitHub Release `v0.1.0-beta.3` 已发布；npm `beta.3` 发布待完成（当前 token 无权限）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -324,7 +324,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.3`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.3)（prerelease，含 npm tarball）。
+GitHub Release：[`v0.1.0-beta.3`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.3)（prerelease，含 npm tarball）。npm `beta.3` 发布待完成。
 
 ## 后续计划
 

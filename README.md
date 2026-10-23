@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.3`（npm dist-tag：`beta`）：
+已发布 `0.1.0-beta.4`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -324,7 +324,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.3`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.3)（prerelease，含 npm tarball）。
+已发布：[`v0.1.0-beta.4`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.4)（prerelease，含 npm tarball）。
 
 ## 后续计划
 
@@ -385,7 +385,7 @@ Cookie 等价于账号密码。
 
 ## Changelog
 
-### Unreleased
+### 0.1.0-beta.4 — 2026-10-24
 
 - 修复 `video_frames` 九宫格的 `times`/`count` 语义：显式时间不再被 12 个上限截断；不传 `count` 时按 `times` 数量推断
 - 修复 `edit_favorite_folder` 未显式传 `privacy` 时的预览语义，避免把内部 `attr` 当作公开/私密状态

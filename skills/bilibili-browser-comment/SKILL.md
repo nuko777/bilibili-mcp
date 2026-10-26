@@ -1,7 +1,7 @@
 ---
 name: bilibili-browser-comment
-description: 在已登录的浏览器里执行 B站图片评论脚本，发布视频/动态的带图评论；用于 MCP post_comment 返回图片可见性警告、纯 API 图片评论可能仅自己可见的场景。
-whenToUse: 当用户要求在 B站视频或动态下发带图评论，或 mcp__bilibili__post_comment 返回 visibility_warning / image_visibility_warning 时。
+description: 在已登录的浏览器里执行 B站图片评论脚本，发布视频/动态的带图评论；MCP post_comment 会拒绝带图，图片评论必须走这里。
+whenToUse: 当用户要求在 B站视频或动态下发带图评论，或 mcp__bilibili__post_comment 因 image_paths 返回“已阻止带图评论发布”时。
 ---
 
 # B站浏览器图片评论
@@ -12,8 +12,8 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
 
 因此：
 
-- `mcp__bilibili__post_comment` 带 `image_paths` 时，结果会带 `visibility_warning` / `image_visibility_warning`；
-- 看到这个警告，**不要重复调用 API 发图**；
+- `mcp__bilibili__post_comment` 带 `image_paths` 会直接报错拒绝，**不会发布**；
+- 看到拒绝，**不要重复调用 API 发图**；
 - 改用本 skill：在已登录浏览器页面中执行独立脚本 [scripts/post-image-comment-browser.js](../../../scripts/post-image-comment-browser.js)。
 
 ## 前置条件

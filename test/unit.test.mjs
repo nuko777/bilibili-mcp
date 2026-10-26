@@ -382,33 +382,17 @@ test('favorite folder edits read a fresh folder snapshot', async () => {
   assert.equal(calls[0].options.cacheTtl, 0);
 });
 
-test('image comments warn to use the browser script', async () => {
-  const fake = {
-    requireLogin() {},
-    get: async (url) => {
-      if (url.endsWith('/x/web-interface/view')) {
-        return {
-          data: {
-            bvid: 'BV1img000001',
-            aid: 1,
-            cid: 2,
-            title: 'test',
-            owner: { mid: 9, name: 'UP' },
-            pages: [{ page: 1, cid: 2, part: 'p1', duration: 60 }],
-          },
-        };
-      }
-      throw new Error(`unexpected call: ${url}`);
-    },
-  };
-  const result = await postComment(fake, {
-    bvid: 'BV1img000001',
-    message: '喵',
-    imagePaths: ['C:/tmp/7.png'],
-    confirm: false,
-  });
-  assert.equal(result.dry_run, true);
-  assert.match(result.details.image_visibility_warning, /post-image-comment-browser\.js/);
+test('image comments are blocked before any API call', async () => {
+  const fake = { requireLogin() {} };
+  await assert.rejects(
+    postComment(fake, {
+      bvid: 'BV1img000001',
+      message: '喵',
+      imagePaths: ['C:/tmp/7.png'],
+      confirm: false,
+    }),
+    (error) => error.code === -400 && /post-image-comment-browser\.js/.test(error.hint || ''),
+  );
 });
 
 test('search min_play filters low-view results', async () => {

@@ -252,7 +252,7 @@ src/server.mjs
 | `create_favorite_folder` | 创建收藏夹 |
 | `edit_favorite_folder` | 修改收藏夹名称/简介/公开状态 |
 | `delete_favorite_folder` | 删除一个或多个收藏夹 |
-| `post_comment` | 视频/动态评论、楼中楼回复、@、可选本地图片、可同时转发动态；API 带图可能仅自己可见，会返回 warning，改按 `bilibili-browser-comment` skill |
+| `post_comment` | 视频/动态**纯文本**评论、楼中楼回复、@、可同时转发动态；带图会被拒绝，改按 `bilibili-browser-comment` skill |
 | `delete_comment` | 删除自己的视频/动态评论；不可撤销 |
 | `delete_dynamic` | 删除自己的动态；不可撤销 |
 | `top_dynamic` | 置顶/取消置顶自己的动态 |
@@ -285,7 +285,6 @@ mcp__bilibili__video_frames {"video": "BV1dan166EHf", "type": "grid", "count": 9
 mcp__bilibili__favorite_video {"video": "BV1dan166EHf", "folder_ids": ["4267463668", "4367445368"], "confirm": false}
 mcp__bilibili__post_dynamic {"text": "分享视频", "video": "BV1w2Hw6KE1j", "confirm": false}
 mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "测试", "mention_user_ids": ["3747573468761409"], "confirm": false}
-mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "图片评论测试", "image_paths": ["D:/path/test.jpg"], "sync_to_dynamic": true, "confirm": false}
 ```
 
 分页约定：
@@ -350,7 +349,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
 - 读取通知/私信聊天记录会触发 B站已读状态，当前接口没有“只读不标已读”开关；`notifications` 和 `messages` 的结果会带 `read_side_effect` / `read_note` 说明。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
-- API 图片评论可能仅自己可见（缺少浏览器 `b_wet` / Gaia token）；`post_comment` 带图会返回 `visibility_warning`，请按 `bilibili-browser-comment` skill 在已登录浏览器中执行 `scripts/post-image-comment-browser.js`。
+- `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。请按 `bilibili-browser-comment` skill 在已登录浏览器中执行 `scripts/post-image-comment-browser.js`。
 - H5 热门卡片只提供标题/封面/BV/UP 名/观看数文本；UP 名和播放量由 `right_desc_*` 解析，其他统计字段不可用。
 
 ## 明确不实现
@@ -436,7 +435,7 @@ Cookie 等价于账号密码。
 - 楼中楼子回复补充 `state` / `is_up`
 - MCP `serverInfo.version` 改为读取 `package.json`
 - 增加九宫格时间上限、子回复状态回归测试
-- 图片评论：上传 Referer 对齐内容页，`pictures` 带 `ai_gen_pic`，读取评论返回 `pictures`；`post_comment` 支持 `sync_to_dynamic`
+- 图片评论：浏览器脚本走页面 UI；API `post_comment` 只支持纯文本，避免图片评论 shadow；文本评论支持 `sync_to_dynamic`
 - 收藏夹写操作只返回可靠的 `code/message`，不再暴露无意义的 `success_num`
 - 更新 skill 的描述/触发范围，清理 README 重复限制
 

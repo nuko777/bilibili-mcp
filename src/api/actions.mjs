@@ -8,8 +8,8 @@ import { getDynamicDetail, normalizeDynamic, resetDynamicFeedCursors } from './d
 import { accountInfo } from './account.mjs';
 import { listFavoriteFolders } from './favorites.mjs';
 
-const IMAGE_COMMENT_VISIBILITY_WARNING =
-  'B站 API 图片评论可能仅自己可见（缺少浏览器 b_wet / Gaia 风控 token）。请按 bilibili-browser-comment skill 的说明，在已登录浏览器中执行 scripts/post-image-comment-browser.js 发布。';
+const IMAGE_COMMENT_BLOCKED_HINT =
+  'MCP 不发布图片评论（API 图片评论可能仅自己可见）。请按 bilibili-browser-comment skill 的说明，在已登录浏览器中执行 scripts/post-image-comment-browser.js 发布。';
 
 function preview(action, target, details = {}, hint = '未执行任何写操作。将 confirm 设为 true 后才会真正执行。') {
   return {
@@ -441,7 +441,12 @@ export async function postComment(
   if (!text) throw new BiliError('评论内容不能为空', { code: -400 });
   if (text.length > 1000) throw new BiliError('评论内容过长（最多 1000 字）', { code: -400 });
   const paths = Array.isArray(imagePaths) ? imagePaths.filter(Boolean) : imagePaths ? [imagePaths] : [];
-  if (paths.length > 9) throw new BiliError('评论图片最多 9 张', { code: -400 });
+  if (paths.length) {
+    throw new BiliError('MCP 已阻止带图评论发布', {
+      code: -400,
+      hint: IMAGE_COMMENT_BLOCKED_HINT,
+    });
+  }
   const mentionIds = [...new Set((Array.isArray(mentionUserIds) ? mentionUserIds : mentionUserIds ? [mentionUserIds] : []).map(String).filter(Boolean))];
   if (mentionIds.length > 10) throw new BiliError('单次最多 @ 10 个用户', { code: -400 });
   if (parent && !root) {
@@ -465,7 +470,6 @@ export async function postComment(
     images: paths,
     sync_to_dynamic: Boolean(syncToDynamic),
     warning: '评论会公开发布，且会以当前账号身份出现。',
-    image_visibility_warning: paths.length ? IMAGE_COMMENT_VISIBILITY_WARNING : undefined,
   };
   if (!confirm) return preview('comment', target, details, '评论是公开内容。确认文案后再设 confirm=true。');
   client.requireCsrf();
@@ -506,10 +510,6 @@ export async function postComment(
     resolved.kind === 'video'
       ? `https://www.bilibili.com/video/${target.bvid}/`
       : `https://www.bilibili.com/opus/${target.dynamic_id}`;
-  const pictures = [];
-  for (const filePath of paths) {
-    pictures.push(await uploadDynamicImage(client, filePath, { referer }));
-  }
   const form = {
     oid,
     type,
@@ -520,7 +520,6 @@ export async function postComment(
     statistics: JSON.stringify({ appId: 100, platform: 5 }),
     at_name_to_mid: JSON.stringify(atNameToMid),
   };
-  if (pictures.length) form.pictures = JSON.stringify(pictures);
   if (syncToDynamic) form.sync_to_dynamic = 1;
   if (root) form.root = String(root);
   if (parent) form.parent = String(parent);
@@ -568,12 +567,10 @@ export async function postComment(
     message: finalMessage,
     reply_to: replyTo || undefined,
     mentions: mentions.length ? mentions : undefined,
-    pictures: pictures.length ? pictures : undefined,
     state,
     visible,
     pending_review: pendingReview,
     visibility_unknown: state === null,
-    visibility_warning: pictures.length ? IMAGE_COMMENT_VISIBILITY_WARNING : undefined,
     result: { code: result.code, message: result.message },
     note:
       state === null

@@ -666,7 +666,7 @@ export const tools = [
     name: 'post_comment',
     title: '发表评论 / 回复',
     description:
-      '在视频或动态下发表评论，可选本地图片；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。注意：API 图片评论可能仅自己可见；带图时请按 bilibili-browser-comment skill 在已登录浏览器中执行 scripts/post-image-comment-browser.js。',
+      '在视频或动态下发表评论（仅文本）；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。带图评论会被拒绝，请按 bilibili-browser-comment skill 在已登录浏览器中执行 scripts/post-image-comment-browser.js。',
     annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,
@@ -675,7 +675,7 @@ export const tools = [
       root: str('根评论 rpid（回复二级评论时）'),
       parent: str('父评论 rpid（回复某条评论时）'),
       mention_user_ids: arr('要显式 @ 的用户 UID 数组，最多 10 个', { items: { type: 'string' }, maxItems: 10 }),
-      image_paths: arr('本地图片路径数组，最多 9 张（jpg/png/gif）', { items: { type: 'string' }, maxItems: 9 }),
+      image_paths: arr('图片评论已禁用；传了会被拒绝，请用 bilibili-browser-comment skill', { items: { type: 'string' }, maxItems: 9 }),
       sync_to_dynamic: bool('发布动态评论时同时转发到我的动态', { default: false }),
       confirm: bool('必须为 true 才发布', { default: false }),
     }, ['message']),

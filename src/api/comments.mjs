@@ -1,11 +1,12 @@
 import { BiliError } from '../core/errors.mjs';
 import { safeArray, toHttps } from '../core/format.mjs';
 import { getDynamicDetail, normalizeDynamic } from './dynamics.mjs';
-import { getView, videoComments } from './videos.mjs';
+import { getView } from './videos.mjs';
 
 const COMMENT_PAGE_SIZE = 20;
+const MAX_COMMENT_PAGE = 20;
 const COMMENT_CACHE_TTL = 2 * 60_000;
-const dynamicCommentCursors = new Map();
+const commentCursors = new Map();
 
 function normalizePictures(content) {
   return safeArray(content?.pictures).map((pic) => ({
@@ -25,7 +26,7 @@ function normalizeMember(member) {
   };
 }
 
-export function normalizeReply(reply, { ownerMid = '' } = {}) {
+export function normalizeReply(reply, { ownerMid = '', isTop = false } = {}) {
   if (!reply) return null;
   const childReplies = safeArray(reply.replies).map((child) => ({
     rpid: String(child.rpid_str || child.rpid || ''),
@@ -52,6 +53,7 @@ export function normalizeReply(reply, { ownerMid = '' } = {}) {
     ctime: reply.ctime || 0,
     state: reply.state ?? null,
     is_up: Boolean(ownerMid && String(reply.member?.mid || '') === String(ownerMid)),
+    is_top: Boolean(isTop),
     pictures: normalizePictures(reply.content),
     mentions: safeArray(reply.content?.members).map(normalizeMember).filter(Boolean),
     replies: childReplies,
@@ -110,19 +112,25 @@ export async function resolveCommentTarget(client, { bvid, aid, dynamicId } = {}
   };
 }
 
+function ownerMidOf(resolved) {
+  return resolved.kind === 'video'
+    ? resolved.view?.owner?.mid
+    : resolved.item?.modules?.module_author?.mid;
+}
+
 function cursorKey({ oid, type, mode }) {
   return `${type}:${oid}:${mode}`;
 }
 
 function getCommentCursor(key) {
-  const cached = dynamicCommentCursors.get(key);
+  const cached = commentCursors.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached;
   const fresh = { offsets: [''], expiresAt: Date.now() + COMMENT_CACHE_TTL };
-  dynamicCommentCursors.set(key, fresh);
+  commentCursors.set(key, fresh);
   return fresh;
 }
 
-async function requestDynamicComments(client, { oid, type, mode, offset }) {
+async function requestWbiComments(client, { oid, type, mode, offset }) {
   return client.getSigned(
     'https://api.bilibili.com/x/v2/reply/wbi/main',
     {
@@ -131,58 +139,77 @@ async function requestDynamicComments(client, { oid, type, mode, offset }) {
       mode,
       pagination_str: JSON.stringify({ offset: offset || '' }),
       plat: 1,
+      seek_rpid: '',
       web_location: 1315875,
     },
     { cacheTtl: 20_000 },
   );
 }
 
-function formatDynamicComments(json, { resolved, page, offset, mode }) {
+function formatWbiComments(json, { resolved, page, offset, mode, ownerMid = '' }) {
   const data = json.data || {};
   const cursor = data.cursor || {};
   const replies = safeArray(data.replies);
   const topReplies = safeArray(data.top_replies);
-  const seen = new Set();
-  const all = [...topReplies, ...replies].filter((reply) => {
-    const key = String(reply.rpid_str || reply.rpid || '');
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const top = topReplies
+    .map((reply) => normalizeReply(reply, { ownerMid, isTop: true }))
+    .filter(Boolean);
+  const seen = new Set(top.map((reply) => String(reply.rpid || '')).filter(Boolean));
+  const normal = [];
+  for (const reply of replies) {
+    const item = normalizeReply(reply, { ownerMid });
+    if (!item) continue;
+    const rpid = String(item.rpid || '');
+    if (rpid && seen.has(rpid)) continue;
+    if (rpid) seen.add(rpid);
+    normal.push(item);
+  }
   return {
     target: resolved.target,
     comment_oid: resolved.oid,
     comment_type: resolved.type,
+    source: 'x/v2/reply/wbi/main',
     mode,
     page,
     offset: offset || '',
     next_offset: cursor.pagination_reply?.next_offset || null,
     has_more: !cursor.is_end,
-    total: cursor.all_count ?? cursor.count ?? all.length,
+    total: cursor.all_count ?? cursor.count ?? replies.length + topReplies.length,
     page_size: COMMENT_PAGE_SIZE,
-    replies: all.map((reply) => normalizeReply(reply)).filter(Boolean),
+    top_replies: top,
+    replies: normal,
   };
 }
 
-async function listDynamicComments(client, resolved, { page = 1, sort = 'hot', offset } = {}) {
+async function listWbiComments(
+  client,
+  resolved,
+  { page = 1, sort = 'hot', offset, ownerMid = ownerMidOf(resolved) } = {},
+) {
   const mode = sort === 'time' ? 2 : 3;
-  const requestedPage = Math.max(1, Math.trunc(Number(page) || 1));
+  const requestedPage = Math.max(1, Math.min(MAX_COMMENT_PAGE, Math.trunc(Number(page) || 1)));
   const key = cursorKey({ oid: resolved.oid, type: resolved.type, mode });
   const cursor = getCommentCursor(key);
 
   if (offset !== undefined && offset !== null && String(offset).trim() !== '') {
-    const json = await requestDynamicComments(client, {
+    const json = await requestWbiComments(client, {
       oid: resolved.oid,
       type: resolved.type,
       mode,
       offset: String(offset),
     });
-    return formatDynamicComments(json, { resolved, page: requestedPage, offset: String(offset), mode });
+    return formatWbiComments(json, {
+      resolved,
+      page: requestedPage,
+      offset: String(offset),
+      mode,
+      ownerMid,
+    });
   }
 
   while (cursor.offsets.length < requestedPage) {
     const current = cursor.offsets[cursor.offsets.length - 1];
-    const json = await requestDynamicComments(client, {
+    const json = await requestWbiComments(client, {
       oid: resolved.oid,
       type: resolved.type,
       mode,
@@ -199,18 +226,21 @@ async function listDynamicComments(client, resolved, { page = 1, sort = 'hot', o
       target: resolved.target,
       comment_oid: resolved.oid,
       comment_type: resolved.type,
+      source: 'x/v2/reply/wbi/main',
       mode,
       page: requestedPage,
       offset: '',
       next_offset: null,
       has_more: false,
       total: 0,
+      page_size: COMMENT_PAGE_SIZE,
+      top_replies: [],
       replies: [],
       hint: '已到评论区末尾，没有更多可翻页内容。',
     };
   }
 
-  const json = await requestDynamicComments(client, {
+  const json = await requestWbiComments(client, {
     oid: resolved.oid,
     type: resolved.type,
     mode,
@@ -218,15 +248,22 @@ async function listDynamicComments(client, resolved, { page = 1, sort = 'hot', o
   });
   const next = json.data?.cursor?.pagination_reply?.next_offset;
   if (next && cursor.offsets[requestedPage] === undefined) cursor.offsets[requestedPage] = next;
-  return formatDynamicComments(json, { resolved, page: requestedPage, offset: targetOffset, mode });
+  return formatWbiComments(json, {
+    resolved,
+    page: requestedPage,
+    offset: targetOffset,
+    mode,
+    ownerMid,
+  });
 }
 
 /**
  * Unified comment reader for videos and dynamics.
- * Video uses the existing page-based endpoint; dynamics resolve their OPUS
- * comment subject (comment_id_str/comment_type) and use the WBI cursor endpoint.
+ * Both use the WBI cursor endpoint. Nested threads still use the dedicated
+ * /x/v2/reply/reply endpoint.
  */
 async function listCommentThread(client, resolved, { root, page = 1, ps = 20 } = {}) {
+  const ownerMid = ownerMidOf(resolved);
   const json = await client.get(
     'https://api.bilibili.com/x/v2/reply/reply',
     {
@@ -242,10 +279,12 @@ async function listCommentThread(client, resolved, { root, page = 1, ps = 20 } =
     target: resolved.target,
     comment_oid: resolved.oid,
     comment_type: resolved.type,
-    root: normalizeReply(json.data?.root),
+    root: normalizeReply(json.data?.root, { ownerMid }),
     page: json.data?.page?.num || page,
     total: json.data?.page?.count ?? safeArray(json.data?.replies).length,
-    replies: safeArray(json.data?.replies).map((reply) => normalizeReply(reply)).filter(Boolean),
+    replies: safeArray(json.data?.replies)
+      .map((reply) => normalizeReply(reply, { ownerMid }))
+      .filter(Boolean),
   };
 }
 
@@ -255,21 +294,18 @@ export async function listComments(
 ) {
   const resolved = await resolveCommentTarget(client, { bvid, aid, dynamicId });
   if (root) return listCommentThread(client, resolved, { root, page, ps });
+  const result = await listWbiComments(client, resolved, {
+    page,
+    sort,
+    offset,
+    ownerMid: ownerMidOf(resolved),
+  });
   if (resolved.kind === 'video') {
-    const result = await videoComments(client, {
-      bvid: resolved.target.bvid,
-      page,
-      ps,
-      sort,
-    });
     return {
       ...result,
-      target: resolved.target,
-      comment_oid: resolved.oid,
-      comment_type: resolved.type,
-      offset: null,
-      next_offset: null,
+      bvid: resolved.view.bvid,
+      aid: String(resolved.view.aid),
     };
   }
-  return listDynamicComments(client, resolved, { page, sort, offset });
+  return result;
 }

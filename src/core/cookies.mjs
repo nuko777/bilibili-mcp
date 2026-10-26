@@ -56,23 +56,3 @@ export const LOGIN_COOKIE_NAMES = ['SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUs
 export function missingLoginCookies(cookies) {
   return LOGIN_COOKIE_NAMES.filter((name) => !cookies || !cookies[name]);
 }
-
-export function redactCookieHeader(header) {
-  const cookies = parseCookieHeader(header);
-  return Object.entries(cookies)
-    .map(([name, value]) => `${name}=${value ? `${String(value).slice(0, 2)}***` : ''}`)
-    .join('; ');
-}
-
-export function describeCookieSource(source) {
-  switch (source) {
-    case 'env':
-      return '环境变量';
-    case 'chrome-cdp':
-      return 'Chrome DevTools Protocol';
-    case 'file':
-      return '本地 Cookie 文件';
-    default:
-      return source || '未知';
-  }
-}

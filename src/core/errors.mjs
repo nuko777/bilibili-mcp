@@ -45,8 +45,12 @@ export function hintForCode(code, context = '') {
       return '超过该视频的投币上限（34005）：单稿最多 2 枚。';
     case 22014:
       return '已经关注该用户（22014）。';
+    case 22118:
+      return '该用户隐私设置，粉丝列表不可见。';
     case 12015:
       return '评论需要验证码（12015）：当前接口无法绕过，请先在网页端完成验证。';
+    case 4125014:
+      return '图片尺寸不合法或过小；请使用宽高更大的 JPEG/PNG/GIF（建议宽高大于 420px）。';
     case -111:
       return 'csrf 校验失败：Cookie 中的 bili_jct 缺失或已过期，请重新登录。';
     default:

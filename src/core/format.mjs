@@ -26,9 +26,23 @@ export function truncate(value, length = 400) {
 
 export function parseVideoRef(input) {
   if (input && typeof input === 'object') {
-    if (input.bvid) return { bvid: String(input.bvid), aid: input.aid ? String(input.aid) : null };
+    if (input.bvid) {
+      const value = String(input.bvid);
+      // Only accept an exact BV id here. A full URL / av id / b23 short link
+      // may be placed in the bvid field by tool wrappers, so parse it as a
+      // string instead of trusting the field name.
+      if (/^BV[0-9A-Za-z]{10}$/.test(value)) {
+        return { bvid: value, aid: input.aid ? String(input.aid) : null };
+      }
+      try {
+        return parseVideoRef(value);
+      } catch {
+        // Fall through to aid/url below.
+      }
+    }
     if (input.aid) return { bvid: null, aid: String(input.aid) };
     if (input.url) return parseVideoRef(input.url);
+    throw new Error('需要提供 bvid、aid 或视频链接');
   }
   if (input === undefined || input === null || input === '') {
     throw new Error('需要提供 bvid、aid 或视频链接');
@@ -180,20 +194,4 @@ export function chunk(array, size) {
 
 export function safeArray(value) {
   return Array.isArray(value) ? value : [];
-}
-
-export function asString(value) {
-  if (value === undefined || value === null) return '';
-  return String(value);
-}
-
-export function relativeTime(timestamp) {
-  const seconds = Number(timestamp);
-  if (!seconds) return '';
-  const delta = Math.floor(Date.now() / 1000) - seconds;
-  if (delta < 60) return '刚刚';
-  if (delta < 3600) return `${Math.floor(delta / 60)} 分钟前`;
-  if (delta < 86400) return `${Math.floor(delta / 3600)} 小时前`;
-  if (delta < 86400 * 30) return `${Math.floor(delta / 86400)} 天前`;
-  return formatDate(seconds);
 }

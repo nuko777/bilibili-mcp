@@ -97,7 +97,7 @@ env:
   BILI_COOKIE: 'SESSDATA=...; bili_jct=...; DedeUserID=...; buvid3=...'
 ```
 
-`BILI_COOKIE` 优先级最高；只设置 `BILI_SESSDATA` 等单项时，会与 `cookies.json` 合并。
+`BILI_COOKIE` 优先级最高，且在进程生命周期内固定；只设置 `BILI_SESSDATA` 等单项时，会与 `cookies.json` 合并，文件更新仍会热重载。
 
 ## 常见问题
 

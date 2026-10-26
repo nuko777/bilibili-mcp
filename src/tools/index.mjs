@@ -11,8 +11,8 @@ import {
 } from '../api/videos.mjs';
 import { getTranscript } from '../media/subtitles.mjs';
 import { framesAsImages, imageFile, videoFrames } from '../media/frames.mjs';
-import { listFavoriteFolders, listFavorites } from '../api/favorites.mjs';
-import { listFollowers, listFollowings, relationStat } from '../api/relations.mjs';
+import { listFavorites } from '../api/favorites.mjs';
+import { listFollowers, listFollowings } from '../api/relations.mjs';
 import {
   atNotifications,
   likeNotifications,
@@ -37,6 +37,7 @@ import {
   likeVideo,
   postComment,
   postDynamic,
+  recallDanmaku,
   sendDanmaku,
   sendMessage,
   topDynamic,
@@ -57,11 +58,18 @@ function readOnly() {
   return { readOnlyHint: true, openWorldHint: true };
 }
 
-function write() {
-  return { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
+function write({ destructive = false, idempotent = false } = {}) {
+  return {
+    readOnlyHint: false,
+    destructiveHint: destructive,
+    idempotentHint: idempotent,
+    openWorldHint: true,
+  };
 }
 
-const videoRef = str('视频标识：BV 号、av 号或视频链接，例如 BV1xx411c7mD / https://www.bilibili.com/video/BV...');
+const videoRef = str(
+  '视频标识：BV 号、av 号、视频链接或 b23.tv 短链，例如 BV1xx411c7mD / https://www.bilibili.com/video/BV... / https://b23.tv/...',
+);
 
 export const tools = [
   {
@@ -69,7 +77,7 @@ export const tools = [
     title: 'B站登录态与账号状态',
     description:
       '读取当前 B 站登录态、昵称、UID、硬币、等级、未读通知/私信数。MCP 不提取登录态；未登录时请使用 bilibili-login skill 从浏览器注入 Cookie。',
-    annotations: readOnly('读取登录态与账号状态'),
+    annotations: readOnly(),
     inputSchema: schema({}),
     handler: async (_args, ctx) => authStatus(ctx.client),
   },
@@ -78,7 +86,7 @@ export const tools = [
     title: 'B站排行榜',
     description:
       '获取 B 站排行榜（对应 /v/popular/rank/all）。返回标题、BV 号、链接、UP 主、分区、统计与标签。标签需逐条补齐，默认只补前 20 条。',
-    annotations: readOnly('读取排行榜'),
+    annotations: readOnly(),
     inputSchema: schema({
       rid: num('分区 ID；0 为全站', { default: 0, minimum: 0 }),
       type: str('榜单类型', { enum: ['all', 'origin', 'rookie'], default: 'all' }),
@@ -99,12 +107,13 @@ export const tools = [
     name: 'popular_list',
     title: 'B站综合热门',
     description:
-      '获取 B 站热门视频。默认走 H5 热门流（app.bilibili.com/x/v2/show/popular/index，9 卡滑动窗口，idx 游标）；personalized=true 走 Web 个性化推荐流（/v/popular/all）。支持标签补齐。',
-    annotations: readOnly('读取综合热门'),
+      '获取 B 站热门视频。默认走 Web 热门页接口（/x/web-interface/popular）；feed="h5" 时走 H5 热门流（app.bilibili.com/x/v2/show/popular/index，9 卡滑动窗口，idx 游标）；personalized=true 走 Web 个性化推荐流。支持标签补齐。',
+    annotations: readOnly(),
     inputSchema: schema({
       page: num('页码，从 1 开始；H5 下等价于 idx=page-1', { default: 1, minimum: 1 }),
       ps: num('每页数量 1-20（H5 单窗口最多 9）', { default: 20, minimum: 1, maximum: 20 }),
-      personalized: bool('是否个性化推荐：true 走 Web 推荐流，false 默认走 H5 热门流', { default: false }),
+      feed: str('热门流来源', { enum: ['web', 'h5'], default: 'web' }),
+      personalized: bool('是否使用 Web 个性化推荐（仅 feed=web 生效）', { default: false }),
       idx: num('H5 滑动窗口游标，优先于 page', { minimum: 0 }),
       limit: num('本次返回条数（可选）', { minimum: 1, maximum: 20 }),
       include_tags: bool('是否补齐标签（默认 true）', { default: true }),
@@ -115,6 +124,7 @@ export const tools = [
         page: args.page ?? 1,
         ps: args.ps ?? 20,
         limit: args.limit,
+        feed: args.feed || 'web',
         personalized: args.personalized === true,
         idx: args.idx,
         includeTags: args.include_tags !== false,
@@ -125,7 +135,7 @@ export const tools = [
     name: 'weekly_issues',
     title: '每周必看期数',
     description: '列出 B 站每周必看的期数、主题与链接（对应 /v/popular/weekly）。',
-    annotations: readOnly('读取每周必看期数'),
+    annotations: readOnly(),
     inputSchema: schema({
       limit: num('返回期数 1-50', { default: 12, minimum: 1, maximum: 50 }),
     }),
@@ -136,7 +146,7 @@ export const tools = [
     title: '每周必看单期',
     description:
       '获取指定期数的每周必看视频列表（对应 /v/popular/weekly?num=395）。不传 number 时默认最新一期。返回标题、链接、标签等。',
-    annotations: readOnly('读取每周必看内容'),
+    annotations: readOnly(),
     inputSchema: schema({
       number: num('期数，例如 395', { minimum: 1 }),
       limit: num('返回条数 1-100', { default: 50, minimum: 1, maximum: 100 }),
@@ -155,7 +165,7 @@ export const tools = [
     name: 'precious_list',
     title: '入站必刷',
     description: '获取 B 站“入站必刷”列表（扩展能力）。',
-    annotations: readOnly('读放入站必刷'),
+    annotations: readOnly(),
     inputSchema: schema({
       limit: num('返回条数 1-100', { default: 20, minimum: 1, maximum: 100 }),
       include_tags: bool('是否补齐标签', { default: true }),
@@ -172,7 +182,7 @@ export const tools = [
     name: 'video_info',
     title: '视频详情',
     description: '获取视频详情：标题、简介、封面、UP 主、统计、分P、标签、可用字幕语言。',
-    annotations: readOnly('读取视频详情'),
+    annotations: readOnly(),
     inputSchema: schema({
       video: videoRef,
       page: num('分P 序号，从 1 开始', { default: 1, minimum: 1 }),
@@ -190,7 +200,7 @@ export const tools = [
     title: '视频字幕/转写文本',
     description:
       '读取视频字幕全文与时间分段。B 站 AI 字幕通常可用；无字幕时返回可用语言与改用 video_frames 的提示。支持多语言字幕。',
-    annotations: readOnly('读取视频字幕'),
+    annotations: readOnly(),
     inputSchema: schema({
       video: videoRef,
       page: num('分P 序号，从 1 开始', { default: 1, minimum: 1 }),
@@ -207,12 +217,12 @@ export const tools = [
     name: 'video_frames',
     title: '视频关键帧截图',
     description:
-      '截取视频关键帧。type=frames 返回单帧列表；type=grid 把最多 81 帧拼成最多 9 张图（每张最多 9 帧，最后一张自动接近正方形并留黑位），frames 返回所有拼图。支持 times 指定关键帧时间。',
-    annotations: readOnly('截取视频画面（只读）'),
+      '截取视频关键帧。type=frames 返回单帧列表（显式 times 最多 12 个）；type=grid 把最多 81 帧拼成最多 9 张图（每张最多 9 帧，最后一张自动接近正方形并留黑位），frames 返回所有拼图；DASH 抽帧失败时回退到 videoshot 缩略图（需要 ffmpeg）。支持 times 指定关键帧时间。',
+    annotations: readOnly(),
     inputSchema: schema({
       video: videoRef,
       times: {
-        description: '时间点数组，例如 ["10%","50%","1:23"] 或 [12, 60]；不传则按 count 均匀取点',
+        description: '时间点数组，例如 ["10%","50%","1:23"] 或 [12, 60]；frames 模式最多 12 个，grid 模式最多 81 个；不传则按 count 均匀取点',
         anyOf: [
           { type: 'string' },
           { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'number' }] }, minItems: 1, maxItems: 81 },
@@ -233,6 +243,14 @@ export const tools = [
       const count = args.count;
       if (type === 'frames' && count > 6) {
         throw new Error('frames 模式 count 最多 6；需要更多请传 type="grid"');
+      }
+      const explicitTimes = Array.isArray(args.times)
+        ? args.times
+        : typeof args.times === 'string' && args.times.trim()
+          ? args.times.split(',').filter((part) => part.trim())
+          : [];
+      if (type === 'frames' && explicitTimes.length > 12) {
+        throw new Error('frames 模式最多 12 个时间点；需要更多请传 type="grid"');
       }
       const result = await videoFrames(ctx.client, {
         bvid: args.video,
@@ -258,19 +276,21 @@ export const tools = [
         ...result,
         __images: images,
         hint:
-          result.source === 'videoshot'
-            ? result.sprite_only
-              ? '已回退到整张缩略图雪碧图；安装 ffmpeg 后可裁切为单帧。'
-              : '已回退到低分辨率缩略图；如需更清晰画面，可安装 ffmpeg 或检查视频是否可播放。'
-            : undefined,
+          result.frame_source === 'videoshot'
+            ? 'DASH 抽帧不可用，九宫格已回退到 videoshot 缩略图（分辨率较低）。'
+            : result.source === 'videoshot'
+              ? result.sprite_only
+                ? '已回退到整张缩略图雪碧图；安装 ffmpeg 后可裁切为单帧。'
+                : '已回退到低分辨率缩略图；如需更清晰画面，可安装 ffmpeg 或检查视频是否可播放。'
+              : undefined,
       };
     },
   },
   {
     name: 'danmaku',
     title: '视频弹幕',
-    description: '读取视频当前弹幕（XML 接口），支持条数限制和关键词过滤。',
-    annotations: readOnly('读取视频弹幕'),
+    description: '读取视频当前弹幕（WBI 分段 protobuf 接口），支持条数限制和关键词过滤。',
+    annotations: readOnly(),
     inputSchema: schema({
       video: videoRef,
       limit: num('返回条数 1-5000', { default: 100, minimum: 1, maximum: 5000 }),
@@ -287,15 +307,15 @@ export const tools = [
     name: 'comments',
     title: '评论区（视频/动态）',
     description:
-      '读取视频或动态评论区，包含评论内容、作者、点赞数、state、@成员和楼中楼回复。video 与 dynamic_id 二选一；动态评论使用 offset 游标，可用 page 便捷翻页。',
-    annotations: readOnly('读取视频/动态评论'),
+      '读取视频或动态评论区，包含评论内容、作者、点赞数、state、@成员和楼中楼回复。video 与 dynamic_id 二选一；两者都使用 WBI 游标接口（offset 优先，page 便捷翻页），主评论每页固定 20 条，置顶评论单独返回在 top_replies 并带 is_top。',
+    annotations: readOnly(),
     inputSchema: schema({
       video: videoRef,
       dynamic_id: str('动态 ID；与 video 二选一'),
-      page: num('页码', { default: 1, minimum: 1 }),
-      ps: num('视频评论每页 1-49（动态使用服务端页大小）', { default: 20, minimum: 1, maximum: 49 }),
+      page: num('页码（最多 20 页）', { default: 1, minimum: 1, maximum: 20 }),
+      ps: num('传 root 读取楼中楼时每页 1-49；主评论固定 20 条/页', { default: 20, minimum: 1, maximum: 49 }),
       sort: str('排序', { enum: ['hot', 'time'], default: 'hot' }),
-      offset: str('动态评论游标；传了就按游标读取'),
+      offset: str('评论游标；优先于 page'),
       root: str('可选：根评论 rpid；传了就读取该评论的楼中楼回复'),
     }),
     handler: async (args, ctx) => {
@@ -316,7 +336,7 @@ export const tools = [
     name: 'search',
     title: '搜索视频/用户',
     description: '按关键词搜索 B 站视频或用户；视频结果含 BV 号、链接、作者、标签。',
-    annotations: readOnly('搜索 B 站内容'),
+    annotations: readOnly(),
     inputSchema: schema({
       keyword: str('搜索关键词'),
       type: str('搜索类型', { enum: ['video', 'user'], default: 'video' }),
@@ -337,7 +357,7 @@ export const tools = [
     name: 'user_info',
     title: '用户信息',
     description: '获取 UP 主/用户的名片信息、等级、粉丝数、关注数。',
-    annotations: readOnly('读取用户信息'),
+    annotations: readOnly(),
     inputSchema: schema({ mid: str('用户 UID') }, ['mid']),
     handler: async (args, ctx) => userInfo(ctx.client, { mid: args.mid }),
   },
@@ -345,7 +365,7 @@ export const tools = [
     name: 'user_videos',
     title: '用户投稿',
     description: '获取指定 UP 主的投稿视频列表。',
-    annotations: readOnly('读取用户投稿'),
+    annotations: readOnly(),
     inputSchema: schema({
       mid: str('用户 UID'),
       page: num('页码', { default: 1, minimum: 1 }),
@@ -364,7 +384,7 @@ export const tools = [
     name: 'list_followings',
     title: '关注列表',
     description: '获取当前账号（或指定用户）的关注列表，支持分页。',
-    annotations: readOnly('读取关注列表'),
+    annotations: readOnly(),
     inputSchema: schema({
       mid: str('用户 UID；不传则使用当前登录账号'),
       page: num('页码', { default: 1, minimum: 1 }),
@@ -381,7 +401,7 @@ export const tools = [
     name: 'list_followers',
     title: '粉丝列表（扩展）',
     description: '获取当前账号（或指定用户）的粉丝列表。',
-    annotations: readOnly('读取粉丝列表'),
+    annotations: readOnly(),
     inputSchema: schema({
       mid: str('用户 UID；不传则使用当前登录账号'),
       page: num('页码', { default: 1, minimum: 1 }),
@@ -395,7 +415,7 @@ export const tools = [
     title: '收藏夹与收藏内容',
     description:
       '不传 folder_id 时列出收藏夹；传 folder_id 时读取该收藏夹的视频内容（支持分页）。',
-    annotations: readOnly('读取收藏夹'),
+    annotations: readOnly(),
     inputSchema: schema({
       folder_id: str('收藏夹 media_id；不传则只列收藏夹'),
       page: num('页码', { default: 1, minimum: 1 }),
@@ -417,7 +437,7 @@ export const tools = [
     title: '回复 / @ / 点赞通知',
     description:
       '读取 B 站消息中心通知。kind=unread 返回未读数；reply 返回“回复我的”；at 返回“@ 我的”；like 返回“收到的赞”。',
-    annotations: readOnly('读取通知'),
+    annotations: readOnly(),
     inputSchema: schema({
       kind: str('通知类型', { enum: ['unread', 'reply', 'at', 'like'], default: 'unread' }),
       page: num('页码（reply/at/like 有效）', { default: 1, minimum: 1 }),
@@ -436,7 +456,7 @@ export const tools = [
     title: '私信会话 / 聊天记录',
     description:
       '不传 talker_id 时列出私信会话；传 talker_id 时读取与该用户的聊天记录（按时间升序）。',
-    annotations: readOnly('读取私信'),
+    annotations: readOnly(),
     inputSchema: schema({
       talker_id: str('会话对方的 UID；不传则列出会话'),
       limit: num('会话数或消息数 1-100', { default: 20, minimum: 1, maximum: 100 }),
@@ -453,7 +473,7 @@ export const tools = [
     title: '关注动态流',
     description:
       '读取关注动态流，包含作者、文本、图片、视频卡片与互动数。支持翻页：用返回的 next_offset 作为 offset 继续，或直接传 page；B 站每页 20 条。',
-    annotations: readOnly('读取动态'),
+    annotations: readOnly(),
     inputSchema: schema({
       page: num('页码，从 1 开始；不传 offset 时生效', { default: 1, minimum: 1, maximum: 20 }),
       offset: str('游标；优先于 page。把上一页返回的 next_offset 传进来'),
@@ -472,7 +492,7 @@ export const tools = [
     title: '用户动态流',
     description:
       '读取指定用户的空间动态流；不传 mid 时读取当前登录账号自己的动态。支持 offset 游标，或 page 便捷翻页。',
-    annotations: readOnly('读取用户动态'),
+    annotations: readOnly(),
     inputSchema: schema({
       mid: str('用户 UID；不传则读取自己的动态'),
       page: num('页码，从 1 开始；不传 offset 时生效', { default: 1, minimum: 1, maximum: 20 }),
@@ -489,7 +509,7 @@ export const tools = [
     name: 'dynamic_detail',
     title: '单条动态详情',
     description: '按动态 ID 读取单条动态的正文、图片、视频卡片、作者、互动数和置顶标记。',
-    annotations: readOnly('读取单条动态'),
+    annotations: readOnly(),
     inputSchema: schema({ dynamic_id: str('动态 ID') }, ['dynamic_id']),
     handler: async (args, ctx) => dynamicDetail(ctx.client, { dynamicId: args.dynamic_id }),
   },
@@ -497,7 +517,7 @@ export const tools = [
     name: 'history',
     title: '观看历史',
     description: '读取当前账号的观看历史（扩展能力）。',
-    annotations: readOnly('读取历史记录'),
+    annotations: readOnly(),
     inputSchema: schema({
       ps: num('返回条数 1-30', { default: 20, minimum: 1, maximum: 30 }),
     }),
@@ -507,7 +527,7 @@ export const tools = [
     name: 'toview',
     title: '稍后再看（扩展）',
     description: '读取当前账号的“稍后再看”列表。',
-    annotations: readOnly('读取稍后再看'),
+    annotations: readOnly(),
     inputSchema: schema({
       ps: num('返回条数 1-30', { default: 20, minimum: 1, maximum: 30 }),
     }),
@@ -517,7 +537,7 @@ export const tools = [
     name: 'related_videos',
     title: '相关推荐（扩展）',
     description: '读取某个视频的相关推荐列表。',
-    annotations: readOnly('读取相关推荐'),
+    annotations: readOnly(),
     inputSchema: schema({
       video: videoRef,
       limit: num('返回条数 1-50', { default: 20, minimum: 1, maximum: 50 }),
@@ -528,7 +548,7 @@ export const tools = [
     name: 'like_video',
     title: '点赞 / 取消点赞',
     description: '点赞或取消点赞视频。默认只预览，不执行；confirm=true 才真正发送请求。可逆。',
-    annotations: write('点赞或取消点赞（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: true }),
     inputSchema: schema({
       video: videoRef,
       like: bool('true 点赞，false 取消', { default: true }),
@@ -542,7 +562,7 @@ export const tools = [
     title: '投币',
     description:
       '给视频投 1-2 枚硬币。默认只预览；confirm=true 才执行。硬币不可撤销，请先确认余额与数量。',
-    annotations: write('投币（默认 dry-run，不可撤销）'),
+    annotations: write({ destructive: true, idempotent: false }),
     inputSchema: schema({
       video: videoRef,
       multiply: num('投币数量 1-2', { default: 1, minimum: 1, maximum: 2 }),
@@ -562,7 +582,7 @@ export const tools = [
     title: '收藏 / 取消收藏',
     description:
       '把视频加入或移出指定收藏夹。默认只预览；confirm=true 才执行。不传 folder_id 时会返回可用收藏夹列表。',
-    annotations: write('收藏或取消收藏（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: true }),
     inputSchema: schema({
       video: videoRef,
       folder_id: str('目标收藏夹 media_id（单收藏夹，兼容旧参数）'),
@@ -583,7 +603,7 @@ export const tools = [
     name: 'create_favorite_folder',
     title: '创建收藏夹',
     description: '创建自己的收藏夹。默认只预览；confirm=true 才创建。名称最多 20 字符，简介最多 200 字符。',
-    annotations: write('创建收藏夹（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       title: str('收藏夹名称', { minLength: 1, maxLength: 20 }),
       intro: str('收藏夹简介', { maxLength: 200 }),
@@ -602,7 +622,7 @@ export const tools = [
     name: 'edit_favorite_folder',
     title: '修改收藏夹',
     description: '修改自己收藏夹的名称、简介或公开状态。默认只预览；confirm=true 才提交。',
-    annotations: write('修改收藏夹（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: true }),
     inputSchema: schema({
       folder_id: str('收藏夹 media_id'),
       title: str('新名称；不传则保持', { minLength: 1, maxLength: 20 }),
@@ -623,7 +643,7 @@ export const tools = [
     name: 'delete_favorite_folder',
     title: '删除收藏夹',
     description: '删除自己的收藏夹，可一次删除多个。默认只预览；confirm=true 才删除。删除不可撤销。',
-    annotations: write('删除收藏夹（默认 dry-run，不可撤销）'),
+    annotations: write({ destructive: true, idempotent: false }),
     inputSchema: schema({
       folder_ids: arr('收藏夹 media_id 数组', { items: { type: 'string' }, minItems: 1, maxItems: 20 }),
       folder_id: str('单个收藏夹 media_id（兼容参数）'),
@@ -643,7 +663,7 @@ export const tools = [
     title: '发表评论 / 回复',
     description:
       '在视频或动态下发表评论，可选本地图片；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。',
-    annotations: write('发表公开评论（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,
       dynamic_id: str('动态 ID；与 video 二选一'),
@@ -674,7 +694,7 @@ export const tools = [
     name: 'like_comment',
     title: '评论点赞 / 取消点赞',
     description: '给视频或动态评论点赞/取消点赞。默认只预览；confirm=true 才执行。可逆。',
-    annotations: write('评论点赞（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: true }),
     inputSchema: schema({
       video: videoRef,
       dynamic_id: str('动态 ID；与 video 二选一'),
@@ -699,7 +719,7 @@ export const tools = [
     title: '删除自己的评论',
     description:
       '删除当前账号自己的视频/动态评论。默认只预览；confirm=true 才删除。只能删除自己的评论，删除不可撤销。',
-    annotations: write('删除评论（默认 dry-run）'),
+    annotations: write({ destructive: true, idempotent: false }),
     inputSchema: schema({
       video: videoRef,
       dynamic_id: str('动态 ID；与 video 二选一'),
@@ -721,11 +741,12 @@ export const tools = [
     name: 'post_dynamic',
     title: '发布动态',
     description:
-      '发布一条动态（文本，可选本地图片路径）。默认只预览；confirm=true 才发布。动态是公开内容。',
-    annotations: write('发布公开动态（默认 dry-run）'),
+      '发布动态：文本、可选本地图片（最多 9 张），或传 video 转发一条视频卡片动态（scene=5）。默认只预览；confirm=true 才发布。动态是公开内容。',
+    annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       text: str('动态正文，最多 2000 字', { maxLength: 2000 }),
-      image_paths: arr('本地图片路径数组，最多 9 张（jpg/png/gif）', {
+      video: videoRef,
+      image_paths: arr('本地图片路径数组，最多 9 张（jpg/png/gif）；与 video 二选一', {
         items: { type: 'string' },
         maxItems: 9,
       }),
@@ -734,8 +755,8 @@ export const tools = [
     handler: async (args, ctx) =>
       postDynamic(ctx.client, {
         text: args.text,
+        video: args.video,
         imagePaths: args.image_paths || [],
-        syncToDynamic: args.sync_to_dynamic === true,
         confirm: args.confirm === true,
       }),
   },
@@ -743,7 +764,7 @@ export const tools = [
     name: 'delete_dynamic',
     title: '删除自己的动态',
     description: '删除当前账号自己的动态。默认只预览；confirm=true 才删除。只能删除自己的动态，删除不可撤销。',
-    annotations: write('删除动态（默认 dry-run）'),
+    annotations: write({ destructive: true, idempotent: false }),
     inputSchema: schema({
       dynamic_id: str('要删除的动态 ID'),
       confirm: bool('必须为 true 才删除', { default: false }),
@@ -758,7 +779,7 @@ export const tools = [
     name: 'top_dynamic',
     title: '置顶 / 取消置顶动态',
     description: '置顶或取消置顶自己的动态。默认只预览；confirm=true 才执行。只能操作自己的动态。',
-    annotations: write('置顶动态（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: true }),
     inputSchema: schema({
       dynamic_id: str('动态 ID'),
       top: bool('true 置顶，false 取消置顶', { default: true }),
@@ -776,7 +797,7 @@ export const tools = [
     title: '修改昵称 / 签名',
     description:
       '修改当前账号的昵称或签名。默认只预览；confirm=true 才提交。修改昵称会消耗 6 个硬币，且不可撤销；签名最多 70 字符。',
-    annotations: write('修改个人资料（默认 dry-run）'),
+    annotations: write({ destructive: true, idempotent: false }),
     inputSchema: schema({
       nickname: str('新昵称；不传则保持不变'),
       signature: str('新签名；不传则保持不变；空字符串表示清空', { maxLength: 70 }),
@@ -797,7 +818,7 @@ export const tools = [
     name: 'toview_video',
     title: '添加 / 移除稍后再看',
     description: '把视频加入或移出“稍后再看”。默认只预览；confirm=true 才执行。可逆。',
-    annotations: write('稍后再看（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: true }),
     inputSchema: schema({
       video: videoRef,
       add: bool('true 加入稍后再看，false 移除', { default: true }),
@@ -814,12 +835,12 @@ export const tools = [
     name: 'send_danmaku',
     title: '发送弹幕',
     description: '发送视频弹幕。默认只预览；confirm=true 才发送。弹幕是公开内容，可能进入审核。',
-    annotations: write('发送弹幕（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,
       text: str('弹幕内容，最多 100 字', { minLength: 1, maxLength: 100 }),
       progress: num('出现时间（秒）', { default: 0, minimum: 0 }),
-      color: num('颜色十进制值', { default: 16777215, minimum: 0 }),
+      color: num('颜色十进制值（0-16777215）', { default: 16777215, minimum: 0, maximum: 0xffffff }),
       fontsize: num('字号', { default: 25, minimum: 12, maximum: 64 }),
       mode: num('模式：1 滚动，4 底部，5 顶部', { default: 1, minimum: 1, maximum: 7 }),
       confirm: bool('必须为 true 才发送', { default: false }),
@@ -836,10 +857,27 @@ export const tools = [
       }),
   },
   {
+    name: 'recall_danmaku',
+    title: '撤回弹幕',
+    description: '撤回自己发送的弹幕（通常限发送后 2 分钟内）。默认只预览；confirm=true 才执行。',
+    annotations: write({ destructive: true, idempotent: false }),
+    inputSchema: schema({
+      video: videoRef,
+      dmid: str('要撤回的弹幕 dmid'),
+      confirm: bool('必须为 true 才撤回', { default: false }),
+    }, ['video', 'dmid']),
+    handler: async (args, ctx) =>
+      recallDanmaku(ctx.client, {
+        bvid: args.video,
+        dmid: args.dmid,
+        confirm: args.confirm === true,
+      }),
+  },
+  {
     name: 'follow_user',
     title: '关注 / 取关',
     description: '关注或取关某个用户。默认只预览；confirm=true 才执行。可逆。',
-    annotations: write('关注或取关（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: true }),
     inputSchema: schema({
       mid: str('目标用户 UID'),
       follow: bool('true 关注，false 取关', { default: true }),
@@ -852,7 +890,7 @@ export const tools = [
     name: 'send_message',
     title: '发送私信',
     description: '给指定用户发送私信。默认只预览；confirm=true 才发送。私信会立即送达对方。',
-    annotations: write('发送私信（默认 dry-run）'),
+    annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       receiver_id: str('接收者 UID'),
       text: str('私信内容，最多 2000 字节', { minLength: 1 }),
@@ -889,7 +927,13 @@ function typeMatches(value, type) {
 }
 
 function validateValue(value, spec, path) {
-  if (!spec || value === undefined || value === null) return;
+  if (!spec || value === undefined) return;
+  if (value === null) {
+    throw new BiliError(`参数 ${path} 不能为 null`, {
+      code: -400,
+      hint: '省略可选参数即可；必填参数请提供有效值。',
+    });
+  }
   if (spec.anyOf) {
     const valid = spec.anyOf.some((branch) => {
       try {
@@ -950,7 +994,16 @@ export function validateToolArgs(tool, args) {
     }
   }
   for (const [key, value] of Object.entries(args)) {
-    if (properties[key]) validateValue(value, properties[key], key);
+    if (!Object.prototype.hasOwnProperty.call(properties, key)) {
+      if (schema.additionalProperties === false) {
+        throw new BiliError(`未知参数：${key}`, {
+          code: -400,
+          hint: '检查参数拼写；可用参数见工具的 inputSchema。',
+        });
+      }
+      continue;
+    }
+    validateValue(value, properties[key], key);
   }
 }
 

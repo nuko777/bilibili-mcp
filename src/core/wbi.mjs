@@ -56,7 +56,3 @@ export function signParams(params, mixinKey, { wts = Math.floor(Date.now() / 100
   const w_rid = md5(`${query}${mixinKey}`);
   return { ...withTs, w_rid };
 }
-
-export function buildSignedQuery(params, mixinKey, options) {
-  return buildQuery(signParams(params, mixinKey, options), { sort: true });
-}

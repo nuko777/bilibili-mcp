@@ -8,7 +8,7 @@
 
 - Node.js >= 20.10（推荐 24），**零运行时依赖**
 - stdio JSON-RPC 2.0，可直接接入 DSH、Claude Desktop、其他 MCP 客户端
-- 25 个只读工具 + 17 个写工具
+- 25 个只读工具 + 18 个写工具
 - 支持排行榜、热门、每周必看、视频信息/字幕/关键帧/九宫格/弹幕、评论、搜索、用户、关注、收藏夹管理、通知、私信、动态流
 - 写操作默认 dry-run，只有 `confirm=true` 才执行
 - 登录态由外部 skill/脚本注入，MCP 本身不读取浏览器、不解密 Cookie 数据库
@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 16 个离线测试，不需要登录
+npm test          # 31 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -153,7 +153,7 @@ Cookie 文件位置：
 
 也支持环境变量：`BILI_COOKIE`（完整 Cookie 头，优先级最高），或 `BILI_SESSDATA` / `BILI_JCT` / `BILI_DEDEUSERID` / `BILI_BUVID3` / `BILI_BUVID4`（与文件合并）。
 
-运行中的 MCP 会检查 `cookies.json` 的 mtime，文件更新后自动重载；若客户端仍显示旧登录态，重连 MCP。
+运行中的 MCP 会检查 `cookies.json` 的 mtime，文件更新后自动重载；若客户端仍显示旧登录态，重连 MCP。完整 `BILI_COOKIE` 在进程生命周期内固定；只设置单项 `BILI_*` 环境变量时会与文件合并，文件更新仍会热重载。
 
 详细步骤见 [skills/bilibili-login/SKILL.md](skills/bilibili-login/SKILL.md)。
 
@@ -167,7 +167,7 @@ src/server.mjs
   ├─ initialize / tools/list / tools/call / ping
   ├─ Cookie 文件 mtime 检查与热重载
   ├─ 工具参数校验
-  └─ src/tools/index.mjs（42 个工具）
+  └─ src/tools/index.mjs（43 个工具）
         ├─ src/api/*      业务 API 与字段归一化
         ├─ src/core/*     HTTP、WBI、Cookie、配置、错误
         └─ src/media/*    字幕、关键帧、播放流、ffmpeg
@@ -191,23 +191,27 @@ src/server.mjs
 | 功能 | 接口 |
 |---|---|
 | 登录态 | `/x/web-interface/nav` |
+| 用户信息 | `/x/space/wbi/acc/info`、`/x/relation/stat`、`/x/space/upstat`、`/x/space/navnum` |
 | 排行榜 | `/x/web-interface/ranking/v2` |
-| 综合热门 | H5：`app.bilibili.com/x/v2/show/popular/index`；Web 个性化：`/x/web-interface/popular` |
+| 综合热门 | Web（默认）：`/x/web-interface/popular`；H5（`feed:"h5"`）：`app.bilibili.com/x/v2/show/popular/index` |
 | 每周必看 | `/x/web-interface/popular/series/list`、`series/one` |
 | 视频详情 | `/x/web-interface/view` |
 | 字幕 | `/x/player/wbi/v2` |
 | 关键帧 | DASH `playurl` + `ffmpeg`；`/x/player/videoshot` 回退 |
-| 评论 | `/x/v2/reply/wbi/main`、`/x/v2/reply/add`、`/x/v2/reply/reply` |
+| 评论 | 视频/动态读取 `/x/v2/reply/wbi/main`；楼中楼 `/x/v2/reply/reply`；写入 `/x/v2/reply/add`、`reply/reply` |
+| 视频互动状态 | `/x/web-interface/archive/relation`（点赞/投币/收藏预览） |
 | 点赞/投币/收藏 | `/x/web-interface/archive/like`、`coin/add`、`/x/v3/fav/resource/deal` |
 | 收藏夹管理 | `/x/v3/fav/folder/add`、`edit`、`del` |
 | 动态 | `/x/polymer/web-dynamic/v1/feed/all`、`feed/space`、`detail`、`/x/dynamic/feed/create/dyn` |
-| 弹幕 | `/x/v1/dm/list.so`、`/x/v2/dm/post` |
+| 弹幕 | 读取 `/x/v2/dm/web/view` + `/x/v2/dm/wbi/web/seg.so`（protobuf）；发送 `/x/v2/dm/post` |
 | 私信 | `/svr_sync/v1/svr_sync/fetch_session_msgs`、`/web_im/v1/web_im/send_msg` |
-| 关注 | `/x/relation/modify` |
+| 关注/粉丝 | 读取 `/x/relation/followings`、`/x/relation/fans`；写入 `/x/relation/modify` |
 
 ### 分页与状态
 
 - 动态流使用 `offset` 游标；`user_dynamics` / `dynamic_feed` 的 `page` 是便捷封装。
+- 视频/动态主评论使用 WBI 游标接口：`offset` 优先，`page` 是便捷封装，每页固定 20 条；`ps` 仅在传 `root` 读取楼中楼时生效。
+- 置顶评论单独放在 `top_replies`（`is_top=true`），不再合并进 `replies`。
 - 其他列表使用 `page` / `ps` / `limit`；服务端对页码做整数截断。
 - 标签补齐默认前 20 条，失败时返回 `tags_complete=false`。
 - 视频评论写入的 Referer 已对齐视频页；OPUS 评论主体从 `basic.comment_type` / `basic.comment_id_str` 解析。
@@ -215,10 +219,12 @@ src/server.mjs
 ### 关键帧
 
 - 优先 DASH 流 + ffmpeg，按 `times` 截帧。
+- `type:"frames"` 的显式 `times` 最多 12 个；需要更多时间点时用 `type:"grid"`（最多 81 帧）。
 - `type:"grid"` 每 9 帧拼一张，最多 9 张；最后一张自动接近正方形并留黑位。
 - 单帧默认高度 720p，宽度按原视频比例计算；`labels` 控制左上角序号。
-- DASH 失败时回退 `videoshot` 雪碧图；无 ffmpeg 时返回整张雪碧图。
+- DASH 失败时回退 `videoshot` 雪碧图；无 ffmpeg 时返回整张雪碧图。grid 模式也会回退到 videoshot 缩略图（需要 ffmpeg）。
 - 媒体缓存位于 `BILI_CACHE_DIR` 或系统缓存目录。
+- 视频标识支持 BV 号、av 号、完整视频链接和 `b23.tv` 短链；短链通过跟随重定向解析。
 
 ## 工具
 
@@ -229,20 +235,20 @@ src/server.mjs
 | 账号 | `auth_status` |
 | 榜单 | `rank_list`、`popular_list`、`weekly_issues`、`weekly_list`、`precious_list` |
 | 视频 | `video_info`、`video_transcript`、`video_frames`（含九宫格）、`danmaku`、`related_videos` |
-| 评论 | `comments`（视频/动态，含楼中楼、state、@成员） |
+| 评论 | `comments`（视频/动态，含楼中楼、state、@成员、置顶 `top_replies`） |
 | 搜索/用户 | `search`、`user_info`、`user_videos` |
 | 社交 | `list_followings`、`list_followers`、`list_favorites` |
 | 消息 | `notifications`、`messages` |
 | 动态/历史 | `dynamic_feed`、`dynamic_detail`、`user_dynamics`（指定用户/自己）、`history`、`toview` |
 
-### 写入（17）
+### 写入（18）
 
 | 工具 | 说明 |
 |---|---|
 | `like_video` | 视频点赞/取消点赞 |
 | `like_comment` | 评论点赞/取消点赞 |
 | `coin_video` | 投币 1–2 枚，可选同时点赞；**不可撤销** |
-| `favorite_video` | 收藏/取消收藏；支持 `folder_ids` 一次收藏到多个收藏夹 |
+| `favorite_video` | 收藏/取消收藏；支持 `folder_id` 单夹或 `folder_ids` 多夹 |
 | `create_favorite_folder` | 创建收藏夹 |
 | `edit_favorite_folder` | 修改收藏夹名称/简介/公开状态 |
 | `delete_favorite_folder` | 删除一个或多个收藏夹 |
@@ -253,7 +259,8 @@ src/server.mjs
 | `update_profile` | 修改昵称/签名；昵称消耗 6 硬币 |
 | `toview_video` | 添加/移除视频到稍后再看 |
 | `send_danmaku` | 发送视频弹幕 |
-| `post_dynamic` | 发布文本/图片动态 |
+| `recall_danmaku` | 撤回自己发送的弹幕（通常限 2 分钟内） |
+| `post_dynamic` | 发布文本/图片动态，或传 `video` 转发视频动态 |
 | `follow_user` | 关注/取关 |
 | `send_message` | 发送私信 |
 
@@ -264,6 +271,7 @@ src/server.mjs
 ```text
 mcp__bilibili__rank_list {"limit": 10, "include_tags": true}
 mcp__bilibili__video_info {"video": "BV1xx411c7mD"}
+mcp__bilibili__video_info {"video": "https://b23.tv/xxxxxxx"}
 mcp__bilibili__video_transcript {"video": "BV1xx411c7mD"}
 mcp__bilibili__video_frames {"video": "BV1xx411c7mD", "times": ["10%", "50%"], "max_images": 2}
 mcp__bilibili__search {"keyword": "DeepSeek R1", "limit": 5}
@@ -275,6 +283,7 @@ mcp__bilibili__user_dynamics {"mid": "401742377"}
 mcp__bilibili__user_dynamics {}
 mcp__bilibili__video_frames {"video": "BV1dan166EHf", "type": "grid", "count": 9, "frame_height": 720}
 mcp__bilibili__favorite_video {"video": "BV1dan166EHf", "folder_ids": ["4267463668", "4367445368"], "confirm": false}
+mcp__bilibili__post_dynamic {"text": "分享视频", "video": "BV1w2Hw6KE1j", "confirm": false}
 mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "测试", "mention_user_ids": ["3747573468761409"], "confirm": false}
 mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "图片评论测试", "image_paths": ["D:/path/test.jpg"], "sync_to_dynamic": true, "confirm": false}
 ```
@@ -284,7 +293,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 - `dynamic_feed` 优先使用 `offset` 游标；`page` 是便捷封装。
 - 其他列表使用 `page` / `ps` / `limit`，具体见工具 schema。
 - `user_dynamics` 不传 `mid` 时读取自己的空间动态；传 `mid` 读取任意用户动态。
-- `popular_list` 默认走 H5 热门流（`idx` 滑动窗口，每窗 9 条）；`personalized=true` 才走 Web 个性化推荐流。H5 卡片字段较薄（通常无 UP 主/播放量），需要时用 `video_info` 补全。
+- `popular_list` 默认走 Web 热门页（`/x/web-interface/popular`）；`feed:"h5"` 时走 H5 热门流（`idx` 滑动窗口，每窗 9 条）；`personalized=true` 使用 Web 个性化推荐。H5 卡片字段较薄（通常无 UP 主/播放量），需要时用 `video_info` 补全。
 - 标签补齐默认只补前 20 条；设置 `include_tags=false` 可减少请求。
 
 ## 配置
@@ -302,7 +311,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 16 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 31 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -335,6 +344,8 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 ## 已知限制
 
 - `videoshot` 回退依赖 ffmpeg；未安装 ffmpeg 时返回整张雪碧图，不裁切单帧。
+- `danmaku` 按 6 分钟窗口读取 WBI 分段，最多 100 段；超长视频的弹幕可能被截断。
+- 单次工具返回的图片总量约 12MB base64；超出部分会被省略，并在结果末尾提示省略数量。
 - B 站接口可能随时调整；端点集中在 `src/api/*`，错误会带原始 `code` 便于更新。
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
 
@@ -385,9 +396,36 @@ Cookie 等价于账号密码。
 
 ## Changelog
 
+### Unreleased
+
+- 工具参数校验拒绝未知字段与显式 `null`，避免拼写错误和 `like:null` 之类被静默接受
+- 写工具 annotations 区分可逆与破坏性操作（点赞/收藏/关注等不再标记为 destructive）
+- 编辑/删除收藏夹前强制读取最新快照，避免旧缓存覆盖并发修改
+- 楼中楼作者查找支持分页；找不到父评论时不再错误回退根作者
+- `video_frames` 的 `frames` 模式明确限制显式 `times` 为 12 个；`grid` 仍最多 81 帧
+- 视频评论与浏览器一致：只使用 WBI 游标接口（`/x/v2/reply/wbi/main`），不再使用 legacy `/x/v2/reply`；置顶评论单独返回 `top_replies`；动态评论 `is_up` 修复
+- `video_frames` 的 `grid` 在 DASH 失败时回退到 `videoshot` 缩略图
+- `post_dynamic` 支持传 `video` 发布视频转发动态（`scene:5` + `web_repost_src`）
+- `top_dynamic` 对新动态的 `4100001` 增加短延迟重试；`create_favorite_folder` 的 `privacy` 按 `attr & 1` 归一化
+- 修复 `delete_favorite_folder` 和 `favorite_video` 只传 `folder_id` 时被空 `folder_ids` 数组覆盖的问题
+- buffer 响应会识别 HTTP 200 的 JSON 错误并抛错，WBI 过期时能正常刷新；HTTP 403/412 也会重试
+- 评论 `page` 上限为 20，避免一次请求逐页走完整评论区；`top_replies` 与 `replies` 按 rpid 去重
+- `b23.tv` / `bili2233.cn` 短链解析只跟随 B站域名，并对整条重定向链使用总超时
+- 弹幕分段使用服务端 `page_size`，补充 `segments_fetched`/`total_estimated`/`truncated`；修正 `59.96s` 显示为 `1:00.0`
+- `dynamicTarget` 只对刚发布动态的 detail 索引缺失做 fallback，网络/WBI 错误不再被吞掉
+- 弹幕读取迁移到浏览器当前的 WBI 分段 protobuf 接口（`/x/v2/dm/web/view` + `/x/v2/dm/wbi/web/seg.so`），不再使用 legacy `/x/v1/dm/list.so`
+- 用户信息改用 `space/wbi/acc/info` + `relation/stat` + `space/upstat` + `space/navnum`；粉丝列表改用 `/x/relation/fans`；视频互动状态统一用 `archive/relation`
+- 私信会话列表改用 WBI 签名请求；综合热门默认改为 Web 热门页，H5 流通过 `feed:"h5"` 显式选择
+- 发送弹幕校验颜色、字号和模式范围；新增 `recall_danmaku`，使用 `/x/v2/dm/recall` 撤回弹幕
+- 删除动态只发送 `dyn_id_str`
+- 只设置单项 Cookie 环境变量时，`cookies.json` 仍会热重载
+- 图片返回超出体积预算时提示省略数量
+- 缓存 ffmpeg 路径探测；清理未使用导出/导入和重复评论归一化代码
+- 补充参数校验、缓存新鲜度、楼中楼分页、短链、WBI 评论等回归测试
+
 ### 0.1.0-beta.4 — 2026-10-24
 
-- 修复 `video_frames` 九宫格的 `times`/`count` 语义：显式时间不再被 12 个上限截断；不传 `count` 时按 `times` 数量推断
+- 修复 `video_frames` 九宫格的 `times`/`count` 语义：grid 的显式时间不再被 12 个上限截断；不传 `count` 时按 `times` 数量推断
 - 修复 `edit_favorite_folder` 未显式传 `privacy` 时的预览语义，避免把内部 `attr` 当作公开/私密状态
 - 发布/删除/置顶动态后清理动态流游标，避免自己的动态流短时间不更新
 - 楼中楼子回复补充 `state` / `is_up`
@@ -442,7 +480,7 @@ Cookie 等价于账号密码。
 src/
   server.mjs            stdio MCP 入口
   mcp/protocol.mjs      JSON-RPC 结果/工具描述
-  tools/index.mjs       42 个工具 schema + 参数校验
+  tools/index.mjs       43 个工具 schema + 参数校验
   core/                 HTTP、WBI、Cookie、配置、错误、格式化
   api/                  榜单、视频、互动、关系、收藏、消息、动态
   media/                字幕、关键帧、播放流、ffmpeg

@@ -2,7 +2,7 @@
 import process from 'node:process';
 import readline from 'node:readline';
 import fs from 'node:fs/promises';
-import { envCookieHeader, paths, resolveBootstrapCookies } from './core/config.mjs';
+import { paths, resolveBootstrapCookies } from './core/config.mjs';
 import { BiliClient } from './core/http.mjs';
 import { userFacingError } from './core/errors.mjs';
 import { runTool, tools, toolMap } from './tools/index.mjs';
@@ -51,7 +51,9 @@ async function loadContext({ quiet = false } = {}) {
 }
 
 async function refreshContext() {
-  if (envCookieHeader()) return; // Environment variables are fixed for the process lifetime.
+  // A full BILI_COOKIE is fixed for the process lifetime. Individual cookie
+  // env vars are merged with cookies.json, so file changes must still reload.
+  if (process.env.BILI_COOKIE && process.env.BILI_COOKIE.trim()) return;
   const mtime = await cookieFileMtime();
   if (mtime !== cookieMtimeMs) await loadContext({ quiet: true });
 }
@@ -86,14 +88,24 @@ async function handleToolCall(params) {
       content.push({ type: 'text', text: JSON.stringify(payload, null, 2) });
     }
     let imageBudget = 12 * 1024 * 1024; // base64 characters, ~9MB binary total
+    let omittedImages = 0;
     for (const image of images) {
       if (!image?.data) continue;
-      if (image.data.length > imageBudget) break;
+      if (image.data.length > imageBudget) {
+        omittedImages += 1;
+        continue;
+      }
       imageBudget -= image.data.length;
       content.push({
         type: 'image',
         data: image.data,
         mimeType: image.mimeType || 'image/jpeg',
+      });
+    }
+    if (omittedImages > 0) {
+      content.push({
+        type: 'text',
+        text: `（已省略 ${omittedImages} 张图片：单次返回图片体积上限约 12MB base64）`,
       });
     }
     if (!content.length) content.push({ type: 'text', text: '{}' });

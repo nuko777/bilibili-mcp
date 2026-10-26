@@ -22,43 +22,36 @@ function which(binary) {
   }
 }
 
-export function findFfmpeg() {
-  if (process.env.BILI_FFMPEG) return process.env.BILI_FFMPEG;
-  const fromPath = which('ffmpeg');
-  if (fromPath) return fromPath;
-  const candidates =
-    process.platform === 'win32'
-      ? [
-          'C:/ffmpeg/bin/ffmpeg.exe',
-          'C:/Program Files/ffmpeg/bin/ffmpeg.exe',
-        ]
-      : ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg'];
-  for (const candidate of candidates) {
-    try {
-      const stat = spawnSync(candidate, ['-version'], { windowsHide: true, encoding: 'utf8' });
-      if (stat.status === 0) return candidate;
-    } catch {
-      // try next
-    }
-  }
-  return null;
-}
+let ffmpegCache = { resolved: false, env: '', value: null };
 
-export function findFfprobe() {
-  if (process.env.BILI_FFPROBE) return process.env.BILI_FFPROBE;
-  const fromPath = which('ffprobe');
-  if (fromPath) return fromPath;
-  const ffmpeg = findFfmpeg();
-  if (ffmpeg) {
-    const probe = path.join(path.dirname(ffmpeg), process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
-    try {
-      const result = spawnSync(probe, ['-version'], { windowsHide: true, encoding: 'utf8' });
-      if (result.status === 0) return probe;
-    } catch {
-      // ignore
+export function findFfmpeg() {
+  const env = process.env.BILI_FFMPEG || '';
+  if (ffmpegCache.resolved && ffmpegCache.env === env) return ffmpegCache.value;
+  let value = null;
+  if (env) {
+    value = env;
+  } else {
+    value = which('ffmpeg');
+    if (!value) {
+      const candidates =
+        process.platform === 'win32'
+          ? ['C:/ffmpeg/bin/ffmpeg.exe', 'C:/Program Files/ffmpeg/bin/ffmpeg.exe']
+          : ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/opt/homebrew/bin/ffmpeg'];
+      for (const candidate of candidates) {
+        try {
+          const stat = spawnSync(candidate, ['-version'], { windowsHide: true, encoding: 'utf8' });
+          if (stat.status === 0) {
+            value = candidate;
+            break;
+          }
+        } catch {
+          // try next
+        }
+      }
     }
   }
-  return null;
+  ffmpegCache = { resolved: true, env, value };
+  return value;
 }
 
 export async function requireFfmpeg() {

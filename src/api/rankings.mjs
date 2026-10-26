@@ -9,10 +9,6 @@ const WEEKLY_ONE_ENDPOINT = 'https://api.bilibili.com/x/web-interface/popular/se
 
 const tagCache = new Map();
 
-export function resetTagCache() {
-  tagCache.clear();
-}
-
 async function fetchTag(client, bvid) {
   const cached = tagCache.get(bvid);
   if (cached && cached.expiresAt > Date.now()) return { tags: cached.tags, ok: cached.ok !== false };
@@ -138,11 +134,11 @@ async function h5PopularList(client, { idx = 0, ps = 20, limit, includeTags = tr
 
 export async function popularList(
   client,
-  { page = 1, ps = 20, limit, includeTags = true, tagLimit = 20, personalized = false, idx } = {},
+  { page = 1, ps = 20, limit, includeTags = true, tagLimit = 20, personalized = false, idx, feed = 'web' } = {},
 ) {
   const safePage = Math.max(1, Math.trunc(Number(page) || 1));
   const safePs = Math.max(1, Math.min(Number(ps) || 20, 20));
-  if (!personalized) {
+  if (feed === 'h5' && !personalized) {
     return h5PopularList(client, {
       idx: idx === undefined || idx === null ? safePage - 1 : idx,
       ps: safePs,
@@ -162,7 +158,7 @@ export async function popularList(
   return {
     source: 'popular',
     feed: 'web',
-    personalized: true,
+    personalized: Boolean(personalized),
     page: safePage,
     ps: safePs,
     no_more: Boolean(json.data?.no_more),

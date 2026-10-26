@@ -286,6 +286,46 @@ export class BiliClient {
         throw lastError;
       }
 
+      if (responseType === 'buffer') {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const contentType = String(response.headers.get('content-type') || '');
+        const first = buffer.length ? buffer.toString('utf8', 0, Math.min(buffer.length, 64)).trimStart()[0] : '';
+        // B站 often returns a JSON error envelope with HTTP 200 for protected
+        // binary endpoints. Parse it so getSigned can refresh stale WBI keys.
+        if (/json/i.test(contentType) || first === '{') {
+          let envelope = null;
+          try {
+            envelope = JSON.parse(buffer.toString('utf8'));
+          } catch {
+            envelope = null;
+          }
+          if (envelope && typeof envelope === 'object' && envelope.code !== undefined) {
+            if (!response.ok && response.status >= 500 && attempt < retry) {
+              await sleep(600 * 2 ** attempt);
+              continue;
+            }
+            assertSuccess(envelope, target.pathname, { allowCodes });
+            throw new BiliError(`期望二进制响应，但返回了 JSON：${target.pathname}`, {
+              endpoint: target.pathname,
+              details: envelope,
+            });
+          }
+        }
+        if (!response.ok) {
+          if (response.status >= 500 && attempt < retry) {
+            await sleep(600 * 2 ** attempt);
+            continue;
+          }
+          throw new BiliError(`B 站返回 HTTP ${response.status}`, {
+            status: response.status,
+            endpoint: target.pathname,
+            hint: hintForStatus(response.status),
+            details: buffer.subarray(0, 300).toString('utf8'),
+          });
+        }
+        return buffer;
+      }
+
       const text = await response.text();
       if (responseType === 'text') {
         if (!response.ok) {
@@ -354,15 +394,15 @@ export class BiliClient {
   /**
    * GET with WBI signature; retries once with a fresh mixin key on signature/risk errors.
    */
-  async getText(url, params = {}, options = {}) {
-    return this.request(url, { ...options, method: 'GET', params, responseType: 'text' });
-  }
-
   async getSigned(url, params = {}, options = {}) {
     try {
       return await this.request(url, { ...options, method: 'GET', params, signed: true });
     } catch (error) {
-      if (error instanceof BiliError && [-352, -403, -412].includes(Number(error.code))) {
+      const status = Number(error.status);
+      if (
+        error instanceof BiliError
+        && ([-352, -403, -412].includes(Number(error.code)) || [403, 412].includes(status))
+      ) {
         await this.getWbiMixin(true).catch(() => {});
         return this.request(url, { ...options, method: 'GET', params, signed: true, retry: 0 });
       }
@@ -387,9 +427,4 @@ export class BiliClient {
       form,
     });
   }
-}
-
-export async function createClient({ cookieHeader, ...options } = {}) {
-  const client = new BiliClient({ cookieHeader, ...options });
-  return client;
 }

@@ -16,12 +16,106 @@ const PLAYER_ENDPOINT = 'https://api.bilibili.com/x/player/wbi/v2';
 
 const viewCache = new Map();
 
-export function clearViewCache() {
-  viewCache.clear();
+const SHORT_LINK_HOSTS = ['b23.tv', 'bili2233.cn', 'b23.wtf'];
+const SHORT_LINK_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36';
+
+function isShortLinkHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return SHORT_LINK_HOSTS.some((item) => host === item || host.endsWith(`.${item}`));
+}
+
+function isResolveHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return isShortLinkHost(host) || host === 'bilibili.com' || host.endsWith('.bilibili.com');
+}
+
+function tryParseVideoRef(value) {
+  try {
+    return parseVideoRef(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve b23.tv / bili2233.cn short links by following redirects. Every hop
+ * must stay on a short-link host or bilibili.com, and the whole resolution
+ * shares one deadline so a redirect chain cannot hang for minutes.
+ */
+export async function resolveShortVideoRef(ref, { fetchImpl = fetch, timeoutMs = 10_000 } = {}) {
+  if (typeof ref !== 'string') return null;
+  let url;
+  try {
+    url = new URL(ref.trim());
+  } catch {
+    return null;
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || !isShortLinkHost(url.hostname)) return null;
+  let current = url.toString();
+  const deadline = Date.now() + Math.max(1, Number(timeoutMs) || 10_000);
+  const remaining = () => deadline - Date.now();
+  const timeoutSignal = () => {
+    const left = remaining();
+    if (left <= 0) return null;
+    return AbortSignal.timeout(left);
+  };
+  const headers = { 'User-Agent': SHORT_LINK_UA, Referer: 'https://www.bilibili.com/' };
+  for (let hop = 0; hop < 4; hop += 1) {
+    const signal = timeoutSignal();
+    if (!signal) return null;
+    let response;
+    try {
+      response = await fetchImpl(current, {
+        method: 'HEAD',
+        redirect: 'manual',
+        headers,
+        signal,
+      });
+    } catch {
+      return null;
+    }
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) return null;
+      const next = new URL(location, current);
+      if (!isResolveHost(next.hostname)) return null;
+      current = next.toString();
+      const parsed = tryParseVideoRef(current);
+      if (parsed) return parsed;
+      continue;
+    }
+    break;
+  }
+  if (!isResolveHost(new URL(current).hostname)) return null;
+  const signal = timeoutSignal();
+  if (!signal) return null;
+  try {
+    const response = await fetchImpl(current, {
+      method: 'GET',
+      redirect: 'follow',
+      headers,
+      signal,
+    });
+    if (!isResolveHost(new URL(response.url).hostname)) return null;
+    return tryParseVideoRef(response.url);
+  } catch {
+    return null;
+  }
 }
 
 export async function getView(client, ref) {
-  const parsed = parseVideoRef(ref);
+  // Tool handlers commonly pass `{ bvid: userInput }`, so extract the raw
+  // scalar before parsing/resolving; otherwise a b23 short link in `bvid`
+  // would be passed to the view endpoint verbatim.
+  const rawRef = ref && typeof ref === 'object' ? ref.bvid || ref.aid || ref.url : ref;
+  let parsed;
+  try {
+    parsed = parseVideoRef(rawRef);
+  } catch (error) {
+    parsed = await resolveShortVideoRef(rawRef);
+    if (!parsed) throw error;
+  }
   const key = parsed.bvid ? `bvid:${parsed.bvid}` : `aid:${parsed.aid}`;
   const cached = viewCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
@@ -128,78 +222,6 @@ export async function videoInfo(client, { bvid, aid, page = 1, includeSubtitles 
   };
 }
 
-export async function videoComments(
-  client,
-  { bvid, aid, page = 1, ps = 20, sort = 'hot' } = {},
-) {
-  const view = await getView(client, { bvid, aid });
-  const json = await client.get(
-    'https://api.bilibili.com/x/v2/reply',
-    {
-      type: 1,
-      oid: view.aid,
-      pn: Math.max(1, Number(page) || 1),
-      ps: Math.max(1, Math.min(Number(ps) || 20, 49)),
-      sort: sort === 'time' ? 0 : 2,
-      plat: 1,
-      web_location: 1315875,
-    },
-    { cacheTtl: 30_000 },
-  );
-  const replies = safeArray(json.data?.replies).map((reply) => ({
-    rpid: String(reply.rpid_str || reply.rpid || ''),
-    user: {
-      mid: String(reply.member?.mid || ''),
-      name: reply.member?.uname || '',
-      avatar: toHttps(reply.member?.avatar || ''),
-    },
-    message: reply.content?.message || '',
-    like: Number(reply.like) || 0,
-    reply_count: Number(reply.rcount) || 0,
-    ctime: reply.ctime || 0,
-    state: reply.state ?? null,
-    is_up: Boolean(reply.up_action?.like) || reply.mid === view.owner?.mid,
-    pictures: safeArray(reply.content?.pictures).map((pic) => ({
-      url: toHttps(pic.img_src || pic.url || ''),
-      width: Number(pic.img_width || pic.width) || 0,
-      height: Number(pic.img_height || pic.height) || 0,
-      size: Number(pic.img_size || pic.size) || 0,
-    })).filter((pic) => pic.url),
-    mentions: safeArray(reply.content?.members).map((member) => ({
-      mid: String(member.mid || ''),
-      name: member.uname || '',
-      avatar: toHttps(member.avatar || ''),
-    })).filter((member) => member.mid),
-    replies: safeArray(reply.replies).map((child) => ({
-      rpid: String(child.rpid_str || child.rpid || ''),
-      user: child.member?.uname || '',
-      message: child.content?.message || '',
-      like: Number(child.like) || 0,
-      ctime: child.ctime || 0,
-      state: child.state ?? null,
-      is_up: String(child.member?.mid || '') === String(view.owner?.mid || ''),
-      pictures: safeArray(child.content?.pictures).map((pic) => ({
-        url: toHttps(pic.img_src || pic.url || ''),
-        width: Number(pic.img_width || pic.width) || 0,
-        height: Number(pic.img_height || pic.height) || 0,
-        size: Number(pic.img_size || pic.size) || 0,
-      })).filter((pic) => pic.url),
-      mentions: safeArray(child.content?.members).map((member) => ({
-        mid: String(member.mid || ''),
-        name: member.uname || '',
-        avatar: toHttps(member.avatar || ''),
-      })).filter((member) => member.mid),
-    })),
-  }));
-  return {
-    bvid: view.bvid,
-    aid: String(view.aid),
-    page: json.data?.page?.num || page,
-    total: json.data?.page?.count || 0,
-    replies,
-  };
-}
-
 export async function search(client, { keyword, type = 'video', page = 1, limit = 20, order = 'totalrank' } = {}) {
   if (!keyword || !String(keyword).trim()) throw new Error('keyword 不能为空');
   const searchType = type === 'user' ? 'bili_user' : 'video';
@@ -261,52 +283,29 @@ export async function search(client, { keyword, type = 'video', page = 1, limit 
 
 export async function userInfo(client, { mid } = {}) {
   if (!mid) throw new Error('需要提供 mid');
-  try {
-    const json = await client.get('https://api.bilibili.com/x/web-interface/card', { mid }, { cacheTtl: 5 * 60_000 });
-    const card = json.data?.card;
-    if (card) {
-      let following = json.data?.following || 0;
-      let fans = json.data?.follower || json.data?.fans || 0;
-      try {
-        const relation = await client.get('https://api.bilibili.com/x/relation/stat', { vmid: card.mid || mid }, { cacheTtl: 60_000 });
-        following = relation.data?.following ?? following;
-        fans = relation.data?.follower ?? fans;
-      } catch {
-        // Keep the card values when relation stat is unavailable.
-      }
-      return {
-        mid: String(card.mid || mid),
-        name: card.name || '',
-        face: toHttps(card.face || ''),
-        sign: truncate(card.sign || '', 300),
-        level: card.level_info?.current_level || 0,
-        fans,
-        following,
-        archive_count: json.data?.archive_count || 0,
-        like_num: json.data?.like_num || 0,
-        url: `https://space.bilibili.com/${card.mid || mid}`,
-      };
-    }
-  } catch {
-    // Fall back to the signed space API below.
-  }
   const json = await client.getSigned(
     'https://api.bilibili.com/x/space/wbi/acc/info',
     { mid },
     { cacheTtl: 5 * 60_000 },
   );
   const data = json.data || {};
+  const vmid = String(data.mid || mid);
+  const [relation, navnum, upstat] = await Promise.allSettled([
+    client.get('https://api.bilibili.com/x/relation/stat', { vmid }, { cacheTtl: 60_000 }),
+    client.get('https://api.bilibili.com/x/space/navnum', { mid: vmid }, { cacheTtl: 60_000 }),
+    client.get('https://api.bilibili.com/x/space/upstat', { mid: vmid }, { cacheTtl: 60_000 }),
+  ]);
   return {
-    mid: String(data.mid || mid),
+    mid: vmid,
     name: data.name || '',
     face: toHttps(data.face || ''),
     sign: truncate(data.sign || '', 300),
     level: data.level || 0,
-    fans: data.fans || 0,
-    following: data.following || 0,
-    archive_count: data.archive_count || 0,
-    like_num: data.like_num || 0,
-    url: `https://space.bilibili.com/${data.mid || mid}`,
+    fans: relation.status === 'fulfilled' ? relation.value.data?.follower ?? 0 : 0,
+    following: relation.status === 'fulfilled' ? relation.value.data?.following ?? 0 : 0,
+    archive_count: navnum.status === 'fulfilled' ? navnum.value.data?.video ?? 0 : 0,
+    like_num: upstat.status === 'fulfilled' ? upstat.value.data?.likes ?? 0 : 0,
+    url: `https://space.bilibili.com/${vmid}`,
   };
 }
 

@@ -94,17 +94,6 @@ export async function writeStoredCookies(cookies, source = 'external') {
   return payload;
 }
 
-export async function clearStoredCookies() {
-  const { cookieFile } = paths();
-  try {
-    await fs.unlink(cookieFile);
-    return true;
-  } catch (error) {
-    if (error.code === 'ENOENT') return false;
-    throw error;
-  }
-}
-
 export function envCookieParts() {
   const names = {
     SESSDATA: 'BILI_SESSDATA',
@@ -119,15 +108,6 @@ export function envCookieParts() {
     if (value && value.trim()) parts[name] = value.trim();
   }
   return parts;
-}
-
-export function envCookieHeader() {
-  if (process.env.BILI_COOKIE && process.env.BILI_COOKIE.trim()) {
-    return process.env.BILI_COOKIE.trim();
-  }
-  return Object.entries(envCookieParts())
-    .map(([name, value]) => `${name}=${value}`)
-    .join('; ');
 }
 
 export async function resolveBootstrapCookies() {

@@ -1,12 +1,15 @@
 import { safeArray, toHttps } from '../core/format.mjs';
 
 function normalizeFolder(folder) {
+  const attr = Number(folder.attr ?? folder.privacy ?? 0);
   return {
     id: String(folder.id || ''),
     fid: folder.fid ? String(folder.fid) : null,
     title: folder.title || '',
     count: folder.media_count ?? folder.count ?? 0,
-    privacy: folder.attr ?? folder.privacy ?? 0,
+    // Bilibili's folder attr is a bitmask; bit0 is the private flag.
+    privacy: Number.isFinite(attr) ? attr & 1 : 0,
+    attr: Number.isFinite(attr) ? attr : null,
     cover: toHttps(folder.cover || ''),
     intro: folder.intro || '',
     ctime: folder.ctime || 0,
@@ -14,13 +17,13 @@ function normalizeFolder(folder) {
   };
 }
 
-export async function listFavoriteFolders(client, { mid } = {}) {
+export async function listFavoriteFolders(client, { mid, cacheTtl = 60_000 } = {}) {
   const upMid = String(mid || client.uid);
   if (!upMid) throw new Error('需要 mid 或已登录账号');
   const json = await client.get(
     'https://api.bilibili.com/x/v3/fav/folder/created/list-all',
     { up_mid: upMid, type: 2, rid: 0 },
-    { cacheTtl: 60_000 },
+    { cacheTtl },
   );
   return {
     mid: upMid,
@@ -74,18 +77,4 @@ export async function listFavorites(client, { folderId, page = 1, ps = 20, keywo
     has_more: Boolean(json.data?.has_more),
     items: safeArray(json.data?.medias).map(normalizeMedia),
   };
-}
-
-export async function favoriteResourceIds(client, { folderId } = {}) {
-  if (!folderId) throw new Error('需要 folderId（收藏夹 media_id）');
-  const json = await client.get(
-    'https://api.bilibili.com/x/v3/fav/resource/ids',
-    { media_id: String(folderId), platform: 'web' },
-    { cacheTtl: 5 * 60_000 },
-  );
-  return safeArray(json.data).map((item) => ({
-    id: String(item.id || ''),
-    type: item.type,
-    bvid: item.bvid || item.bv_id || '',
-  }));
 }

@@ -34,9 +34,6 @@ export function writeMessage(stream, message) {
   stream.write(`${JSON.stringify(message)}\n`);
 }
 
-export function textResult(text) {
-  return { content: [{ type: 'text', text: String(text) }] };
-}
 
 export function errorResult(text) {
   return { content: [{ type: 'text', text: String(text) }], isError: true };

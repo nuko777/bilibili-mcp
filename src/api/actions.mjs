@@ -30,16 +30,24 @@ async function videoTarget(client, { bvid, aid }) {
   };
 }
 
+async function videoRelation(client, { aid, bvid }) {
+  try {
+    const json = await client.get(
+      'https://api.bilibili.com/x/web-interface/archive/relation',
+      { aid, bvid },
+      { cacheTtl: 0 },
+    );
+    return json.data || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function likeVideo(client, { bvid, aid, like = true, confirm = false } = {}) {
   client.requireLogin();
   const target = await videoTarget(client, { bvid, aid });
-  let current = null;
-  try {
-    const state = await client.get('https://api.bilibili.com/x/web-interface/archive/has/like', { aid: target.aid });
-    current = Number(state.data) === 1;
-  } catch {
-    current = null;
-  }
+  const relation = await videoRelation(client, { aid: target.aid, bvid: target.bvid });
+  const current = relation ? Boolean(relation.like) : null;
   const desired = Boolean(like);
   const details = { current_liked: current, desired_liked: desired };
   if (!confirm) return preview(desired ? 'like' : 'unlike', target, details);
@@ -115,13 +123,8 @@ export async function coinVideo(client, { bvid, aid, multiply = 1, selectLike = 
   if (!Number.isInteger(count) || count < 1 || count > 2) {
     throw new BiliError('投币数量必须是 1 或 2', { code: -400, hint: 'multiply ∈ [1, 2]' });
   }
-  let current = 0;
-  try {
-    const state = await client.get('https://api.bilibili.com/x/web-interface/archive/coins', { bvid: target.bvid });
-    current = Number(state.data?.multiply) || 0;
-  } catch {
-    current = 0;
-  }
+  const relation = await videoRelation(client, { aid: target.aid, bvid: target.bvid });
+  const current = Number(relation?.coin) || 0;
   if (current + count > 2) {
     throw new BiliError(`该视频已投 ${current} 枚硬币，最多再投 ${Math.max(0, 2 - current)} 枚`, {
       code: -400,
@@ -163,18 +166,20 @@ export async function favoriteVideo(
 ) {
   client.requireLogin();
   const target = await videoTarget(client, { bvid, aid });
-  const requestedFolderIds = [...new Set(
-    (Array.isArray(folderIds) ? folderIds : folderIds ? [folderIds] : folderId ? [folderId] : [])
-      .map(String)
-      .filter(Boolean),
-  )];
+  const rawFolderIds = Array.isArray(folderIds) ? [...folderIds] : folderIds ? [folderIds] : [];
+  // The MCP handler supplies folder_ids: [] together with the legacy
+  // folder_id, so an empty array must still fall back to the single id.
+  if (!rawFolderIds.length && folderId) rawFolderIds.push(folderId);
+  const requestedFolderIds = [...new Set(rawFolderIds.map(String).filter(Boolean))];
   if (requestedFolderIds.length > 20) throw new BiliError('单次最多操作 20 个收藏夹', { code: -400 });
   if (!requestedFolderIds.length) {
-    const folders = await client.get('https://api.bilibili.com/x/v3/fav/folder/created/list-all', {
-      up_mid: client.uid,
-      type: 2,
-      rid: 0,
-    });
+    // This list is shown to the user as a choice; cache would be misleading
+    // right after creating/renaming a folder in the same session.
+    const folders = await client.get(
+      'https://api.bilibili.com/x/v3/fav/folder/created/list-all',
+      { up_mid: client.uid, type: 2, rid: 0 },
+      { cacheTtl: 0 },
+    );
     const list = (folders.data?.list || []).map((folder) => ({
       id: String(folder.id),
       title: folder.title,
@@ -197,13 +202,8 @@ export async function favoriteVideo(
       hint: `可用收藏夹：${list.map((folder) => `${folder.title}(${folder.id})`).join('、') || '无'}`,
     });
   }
-  let currentFavoured = null;
-  try {
-    const state = await client.get('https://api.bilibili.com/x/v2/fav/video/favoured', { aid: target.aid });
-    currentFavoured = Boolean(state.data?.favoured);
-  } catch {
-    currentFavoured = null;
-  }
+  const relation = await videoRelation(client, { aid: target.aid, bvid: target.bvid });
+  const currentFavoured = relation ? Boolean(relation.favorite) : null;
   const details = {
     folder_ids: requestedFolderIds,
     current_favoured: currentFavoured,
@@ -257,7 +257,9 @@ function validateFolderFields({ title, intro, privacy }) {
 }
 
 async function findFavoriteFolder(client, folderId) {
-  const result = await listFavoriteFolders(client, { mid: client.uid });
+  // Always bypass the folder-list cache: this snapshot is merged into edits, so
+  // a stale entry could write old intro/cover values back to Bilibili.
+  const result = await listFavoriteFolders(client, { mid: client.uid, cacheTtl: 0 });
   const folder = result.items.find((item) => String(item.id) === String(folderId));
   if (!folder) throw new BiliError('找不到该收藏夹，或不是自己的收藏夹', { code: -404 });
   return folder;
@@ -286,7 +288,13 @@ export async function createFavoriteFolder(client, { title, intro = '', privacy 
     action: 'create_favorite_folder',
     target,
     folder: result.data
-      ? { id: String(result.data.id), fid: String(result.data.fid), title: result.data.title, privacy: result.data.attr }
+      ? {
+          id: String(result.data.id),
+          fid: String(result.data.fid),
+          title: result.data.title,
+          privacy: Number(result.data.attr ?? 0) & 1,
+          attr: Number(result.data.attr ?? 0),
+        }
       : null,
     result: { code: result.code, message: result.message },
   };
@@ -343,10 +351,14 @@ export async function editFavoriteFolder(
 
 export async function deleteFavoriteFolder(client, { folderIds, folderId, confirm = false } = {}) {
   client.requireLogin();
-  const ids = [...new Set((Array.isArray(folderIds) ? folderIds : folderIds ? [folderIds] : folderId ? [folderId] : []).map(String).filter(Boolean))];
+  const rawIds = Array.isArray(folderIds) ? [...folderIds] : folderIds ? [folderIds] : [];
+  // The MCP handler supplies folder_ids: [] together with the legacy
+  // folder_id, so an empty array must still fall back to the single id.
+  if (!rawIds.length && folderId) rawIds.push(folderId);
+  const ids = [...new Set(rawIds.map(String).filter(Boolean))];
   if (!ids.length) throw new BiliError('需要提供 folder_ids 或 folder_id', { code: -400 });
   if (ids.length > 20) throw new BiliError('单次最多删除 20 个收藏夹', { code: -400 });
-  const folders = await listFavoriteFolders(client, { mid: client.uid });
+  const folders = await listFavoriteFolders(client, { mid: client.uid, cacheTtl: 0 });
   const selected = ids.map((id) => {
     const folder = folders.items.find((item) => String(item.id) === id);
     return { id, title: folder?.title || '', count: folder?.count ?? null };
@@ -388,18 +400,33 @@ async function assertImageBatch(paths) {
   }
 }
 
-async function replyAuthorName(client, { oid, type, root, parent }) {
-  const json = await client.get(
-    'https://api.bilibili.com/x/v2/reply/reply',
-    { oid, type, root: String(root), pn: 1, ps: 49 },
-    { allowCodes: [0, -400], cacheTtl: 0 },
-  );
-  const rootReply = json.data?.root;
-  if (String(parent) === String(root)) return rootReply?.member?.uname || '';
-  const node = (json.data?.replies || []).find(
-    (item) => String(item.rpid_str || item.rpid) === String(parent),
-  );
-  return node?.member?.uname || rootReply?.member?.uname || '';
+const REPLY_PAGE_SIZE = 49;
+const MAX_REPLY_PAGES = 10;
+
+export async function replyAuthorName(client, { oid, type, root, parent }) {
+  let rootReply = null;
+  for (let pn = 1; pn <= MAX_REPLY_PAGES; pn += 1) {
+    const json = await client.get(
+      'https://api.bilibili.com/x/v2/reply/reply',
+      { oid, type, root: String(root), pn, ps: REPLY_PAGE_SIZE },
+      { allowCodes: [0, -400], cacheTtl: 0 },
+    );
+    rootReply ||= json.data?.root;
+    if (pn === 1 && String(parent) === String(root)) return rootReply?.member?.uname || '';
+    const replies = json.data?.replies || [];
+    const node = replies.find(
+      (item) => String(item.rpid_str || item.rpid) === String(parent),
+    );
+    if (node) return node.member?.uname || '';
+    const total = Number(json.data?.page?.count);
+    const hasMore =
+      replies.length >= REPLY_PAGE_SIZE &&
+      (!Number.isFinite(total) || total <= 0 || pn * REPLY_PAGE_SIZE < total);
+    if (!hasMore) break;
+  }
+  // Never fall back to the root author: a wrong "回复 @xxx" prefix is worse
+  // than letting postComment raise a clear parent-not-found error.
+  return '';
 }
 
 export async function postComment(
@@ -465,7 +492,7 @@ export async function postComment(
     if (!replyTo) {
       throw new BiliError('无法解析被回复评论的作者', {
         code: -400,
-        hint: '父评论可能已删除；请检查 root/parent。',
+        hint: '父评论可能已删除，或位于更深的回复分页；请检查 root/parent。',
       });
     }
     const replyPrefix = `回复 @${replyTo} : `;
@@ -650,20 +677,53 @@ export async function deleteComment(
   };
 }
 
-export async function postDynamic(client, { text, imagePaths = [], confirm = false } = {}) {
+export async function postDynamic(client, { text, imagePaths = [], video, confirm = false } = {}) {
   client.requireLogin();
   const content = String(text ?? '').trim();
   const paths = Array.isArray(imagePaths) ? imagePaths.filter(Boolean) : imagePaths ? [imagePaths] : [];
-  if (!content && !paths.length) throw new BiliError('动态内容不能为空（文本或图片至少一项）', { code: -400 });
   if (content.length > 2000) throw new BiliError('动态文本过长（最多 2000 字）', { code: -400 });
   if (paths.length > 9) throw new BiliError('动态图片最多 9 张', { code: -400 });
-  const details = {
-    text: content,
-    images: paths,
-    scene: paths.length ? 2 : 1,
-    warning: '动态会公开发布，且会以当前账号身份出现。',
-  };
-  if (!confirm) return preview('publish_dynamic', { uid: client.uid }, details, '动态是公开内容。确认文案后再设 confirm=true。');
+  if (video && paths.length) {
+    throw new BiliError('视频转发动态不能同时附带本地图片', { code: -400 });
+  }
+  if (!content && !paths.length && !video) {
+    throw new BiliError('动态内容不能为空（文本、图片或视频至少一项）', { code: -400 });
+  }
+
+  const view = video ? await getView(client, video) : null;
+  const details = video
+    ? {
+        text: content || '分享视频',
+        video: {
+          bvid: view.bvid,
+          aid: String(view.aid),
+          title: view.title,
+          url: `https://www.bilibili.com/video/${view.bvid}`,
+        },
+        scene: 5,
+        warning: '会以当前账号身份发布一条视频转发动态。',
+      }
+    : {
+        text: content,
+        images: paths,
+        scene: paths.length ? 2 : 1,
+        warning: '动态会公开发布，且会以当前账号身份出现。',
+      };
+  if (!confirm) {
+    return preview(
+      video ? 'share_video_dynamic' : 'publish_dynamic',
+      video
+        ? {
+            bvid: view.bvid,
+            aid: String(view.aid),
+            title: view.title,
+            url: `https://www.bilibili.com/video/${view.bvid}`,
+          }
+        : { uid: client.uid },
+      details,
+      '动态是公开内容。确认文案后再设 confirm=true。',
+    );
+  }
   client.requireCsrf();
   await assertImageBatch(paths);
 
@@ -674,63 +734,132 @@ export async function postDynamic(client, { text, imagePaths = [], confirm = fal
   const uploadId = `${client.uid}_${Math.floor(Date.now() / 1000)}_${crypto.randomInt(1000, 9999)}`;
   const dynReq = {
     content: {
-      contents: content ? [{ raw_text: content, type: 1, biz_id: '' }] : [],
+      contents: content || video
+        ? [{ raw_text: content || '分享视频', type: 1, biz_id: '' }]
+        : [],
     },
     meta: { app_meta: { from: 'create.dynamic.web', mobi_app: 'web' } },
-    scene: paths.length ? 2 : 1,
+    scene: video ? 5 : paths.length ? 2 : 1,
     upload_id: uploadId,
   };
   if (pics.length) dynReq.pics = pics;
+  const body = video
+    ? {
+        dyn_req: dynReq,
+        web_repost_src: {
+          revs_id: { dyn_type: 8, rid: Number(view.aid) },
+        },
+      }
+    : { dyn_req: dynReq };
 
   const result = await client.postJson(
     `https://api.bilibili.com/x/dynamic/feed/create/dyn?csrf=${encodeURIComponent(client.csrf)}`,
-    { dyn_req: dynReq },
-    { retry: 0 },
+    body,
+    { retry: 0, referer: video ? 'https://t.bilibili.com/' : undefined },
   );
   const dynamicId = result.data?.dyn_id_str || result.data?.dyn_id || result.data?.dynamic_id_str || null;
   client.clearCache?.();
   resetDynamicFeedCursors();
   return {
     ok: result.code === 0,
-    action: 'publish_dynamic',
+    action: video ? 'share_video_dynamic' : 'publish_dynamic',
+    target: video
+      ? {
+          bvid: view.bvid,
+          aid: String(view.aid),
+          title: view.title,
+          url: `https://www.bilibili.com/video/${view.bvid}`,
+        }
+      : undefined,
     dynamic_id: dynamicId ? String(dynamicId) : null,
     url: dynamicId ? `https://t.bilibili.com/${dynamicId}` : 'https://t.bilibili.com/',
-    result: { code: result.code, message: result.message },
+    result: {
+      code: result.code,
+      message: result.message,
+      dyn_type: result.data?.dyn_type,
+    },
   };
+}
+
+async function dynamicTarget(client, dynamicId) {
+  try {
+    const item = await getDynamicDetail(client, dynamicId);
+    const dynamic = normalizeDynamic(item);
+    return {
+      detail: true,
+      target: {
+        dynamic_id: String(dynamicId),
+        url: dynamic?.url || `https://t.bilibili.com/${dynamicId}`,
+        text: dynamic?.text?.slice(0, 120) || '',
+        author: dynamic?.author?.name || '',
+      },
+    };
+  } catch (error) {
+    // A just-published dynamic can briefly miss the detail index
+    // (MISS_OPUS_DETAIL_DATA). Top/delete only need the id, so allow that
+    // specific race; network/WBI/auth failures must still surface.
+    const code = Number(error.code);
+    const message = String(error.message || '');
+    if (code !== 500 && !message.includes('MISS_OPUS_DETAIL_DATA')) throw error;
+    return {
+      detail: false,
+      target: {
+        dynamic_id: String(dynamicId),
+        url: `https://t.bilibili.com/${dynamicId}`,
+        text: '',
+        author: '',
+      },
+    };
+  }
 }
 
 export async function topDynamic(client, { dynamicId, top = true, confirm = false } = {}) {
   client.requireLogin();
   if (!dynamicId) throw new BiliError('需要提供 dynamic_id', { code: -400 });
-  const item = await getDynamicDetail(client, dynamicId);
-  const dynamic = normalizeDynamic(item);
-  const target = {
-    dynamic_id: String(dynamicId),
-    url: dynamic?.url || `https://t.bilibili.com/${dynamicId}`,
-    text: dynamic?.text?.slice(0, 120) || '',
-    author: dynamic?.author?.name || '',
-  };
+  const resolved = await dynamicTarget(client, dynamicId);
+  const target = resolved.target;
   const desired = Boolean(top);
-  const details = { dynamic_id: String(dynamicId), desired: desired ? 'top' : 'untop' };
+  const details = {
+    dynamic_id: String(dynamicId),
+    desired: desired ? 'top' : 'untop',
+    detail_unavailable: resolved.detail ? undefined : true,
+  };
   if (!confirm) {
     return preview(desired ? 'top_dynamic' : 'untop_dynamic', target, details);
   }
   client.requireCsrf();
   const endpoint = desired ? 'set_top' : 'rm_top';
-  const result = await client.postJson(
-    `https://api.bilibili.com/x/dynamic/feed/space/${endpoint}?csrf=${encodeURIComponent(client.csrf)}`,
-    { dyn_str: String(dynamicId) },
-    { retry: 0, referer: `https://space.bilibili.com/${client.uid}/dynamic` },
-  );
+  // A just-published dynamic can briefly return 4100001 while its space index
+  // catches up; retry the same operation before surfacing the error.
+  const delays = [0, 2000, 3000];
+  let result = null;
+  let attempt = 0;
+  for (; attempt < delays.length; attempt += 1) {
+    if (delays[attempt]) await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    try {
+      result = await client.postJson(
+        `https://api.bilibili.com/x/dynamic/feed/space/${endpoint}?csrf=${encodeURIComponent(client.csrf)}`,
+        { dyn_str: String(dynamicId) },
+        { retry: 0, referer: `https://space.bilibili.com/${client.uid}/dynamic` },
+      );
+      break;
+    } catch (error) {
+      if (error instanceof BiliError && Number(error.code) === 4100001 && attempt < delays.length - 1) {
+        continue;
+      }
+      throw error;
+    }
+  }
   client.clearCache?.();
   resetDynamicFeedCursors();
   return {
-    ok: result.code === 0,
+    ok: result?.code === 0,
     action: desired ? 'top_dynamic' : 'untop_dynamic',
     target,
     dynamic_id: String(dynamicId),
     topped: desired,
-    result: { code: result.code, message: result.message },
+    retries: attempt,
+    result: { code: result?.code, message: result?.message },
   };
 }
 
@@ -800,29 +929,21 @@ export async function updateProfile(client, { nickname, signature, confirm = fal
 export async function deleteDynamic(client, { dynamicId, confirm = false } = {}) {
   client.requireLogin();
   if (!dynamicId) throw new BiliError('需要提供 dynamic_id', { code: -400 });
-  const item = await getDynamicDetail(client, dynamicId);
-  const dynamic = normalizeDynamic(item);
-  const target = {
-    dynamic_id: String(dynamicId),
-    url: dynamic?.url || `https://t.bilibili.com/${dynamicId}`,
-    text: dynamic?.text?.slice(0, 120) || '',
-    author: dynamic?.author?.name || '',
-  };
-  const rid = String(item.basic?.rid_str || item.basic?.comment_id_str || '');
-  const dynType = item.type === 'DYNAMIC_TYPE_DRAW' || item.type === 'DYNAMIC_TYPE_WORD' ? 2 : null;
+  const resolved = await dynamicTarget(client, dynamicId);
+  const target = resolved.target;
   const details = {
     dynamic_id: String(dynamicId),
-    dyn_type: dynType,
-    rid_str: rid || undefined,
+    detail_unavailable: resolved.detail ? undefined : true,
     warning: '只能删除自己的动态；删除不可撤销。',
   };
   if (!confirm) {
     return preview('delete_dynamic', target, details, '删除动态不可撤销。确认后设 confirm=true。');
   }
   client.requireCsrf();
+  // The modern remove endpoint only requires dyn_id_str. Sending a partial
+  // dyn_type/rid_str (the old code did this for DRAW/WORD only) is optional
+  // and can trip 4101001 for other dynamic types, so omit it entirely.
   const body = { dyn_id_str: String(dynamicId) };
-  if (dynType !== null) body.dyn_type = dynType;
-  if (rid) body.rid_str = rid;
   const result = await client.postJson(
     `https://api.bilibili.com/x/dynamic/feed/operate/remove?platform=web&csrf=${encodeURIComponent(client.csrf)}`,
     body,
@@ -871,6 +992,18 @@ export async function sendDanmaku(
   client.requireLogin();
   if (!text || !String(text).trim()) throw new BiliError('弹幕内容不能为空', { code: -400 });
   if ([...String(text)].length > 100) throw new BiliError('弹幕最多 100 个字符', { code: -400 });
+  const colorValue = Number(color);
+  if (!Number.isInteger(colorValue) || colorValue < 0 || colorValue > 0xffffff) {
+    throw new BiliError('弹幕颜色必须是 0-16777215 的整数', { code: -400 });
+  }
+  const fontSize = Number(fontsize);
+  if (!Number.isInteger(fontSize) || fontSize < 12 || fontSize > 64) {
+    throw new BiliError('弹幕字号必须是 12-64 的整数', { code: -400 });
+  }
+  const danmakuMode = Number(mode);
+  if (!Number.isInteger(danmakuMode) || danmakuMode < 1 || danmakuMode > 7) {
+    throw new BiliError('弹幕模式必须是 1-7 的整数', { code: -400 });
+  }
   const view = await getView(client, { bvid, aid });
   const target = {
     bvid: view.bvid,
@@ -885,9 +1018,9 @@ export async function sendDanmaku(
     text: String(text),
     progress_seconds: safeProgress,
     progress_ms: Math.round(safeProgress * 1000),
-    color: Number(color) || 16777215,
-    fontsize: Number(fontsize) || 25,
-    mode: Number(mode) || 1,
+    color: colorValue,
+    fontsize: fontSize,
+    mode: danmakuMode,
     warning: '弹幕是公开内容；发送后可能进入审核。',
   };
   if (!confirm) return preview('send_danmaku', target, details);
@@ -933,6 +1066,55 @@ export async function sendDanmaku(
   };
 }
 
+export async function recallDanmaku(
+  client,
+  { bvid, aid, cid, dmid, confirm = false } = {},
+) {
+  client.requireLogin();
+  if (!dmid) throw new BiliError('需要提供弹幕 dmid', { code: -400 });
+  let targetCid = cid ? String(cid) : '';
+  let target = null;
+  if (bvid || aid) {
+    const view = await getView(client, { bvid, aid });
+    targetCid = targetCid || String(view.cid || '');
+    target = {
+      bvid: view.bvid,
+      aid: String(view.aid),
+      cid: targetCid,
+      title: view.title,
+      url: `https://www.bilibili.com/video/${view.bvid}`,
+    };
+  }
+  if (!targetCid) throw new BiliError('需要提供视频或 cid 以定位弹幕', { code: -400 });
+  const details = {
+    dmid: String(dmid),
+    cid: targetCid,
+    note: '弹幕撤回通常仅限发送后 2 分钟内。',
+  };
+  if (!confirm) {
+    return preview(
+      'recall_danmaku',
+      target || { cid: targetCid },
+      details,
+      '弹幕撤回通常仅限发送后 2 分钟内。确认后设 confirm=true。',
+    );
+  }
+  client.requireCsrf();
+  const result = await client.postForm(
+    'https://api.bilibili.com/x/v2/dm/recall',
+    { dmid: String(dmid), cid: targetCid, type: 1, csrf: client.csrf },
+    { retry: 0, referer: target?.url || 'https://www.bilibili.com/' },
+  );
+  return {
+    ok: result.code === 0,
+    action: 'recall_danmaku',
+    target,
+    dmid: String(dmid),
+    cid: targetCid,
+    result: { code: result.code, message: result.message },
+  };
+}
+
 export async function followUser(client, { mid, follow = true, confirm = false } = {}) {
   client.requireLogin();
   if (!mid) throw new BiliError('需要提供 mid', { code: -400 });
@@ -967,7 +1149,6 @@ export async function followUser(client, { mid, follow = true, confirm = false }
 
 export async function sendMessage(client, { receiverId, text, confirm = false } = {}) {
   client.requireLogin();
-  client.requireCsrf();
   if (!receiverId) throw new BiliError('需要提供 receiverId', { code: -400 });
   const content = String(text ?? '').trim();
   if (!content) throw new BiliError('私信内容不能为空', { code: -400 });
@@ -979,6 +1160,7 @@ export async function sendMessage(client, { receiverId, text, confirm = false } 
   const devId = `${devHash.slice(0, 8)}-${devHash.slice(8, 12)}-${devHash.slice(12, 16)}-${devHash.slice(16, 20)}-${devHash.slice(20, 32)}`;
   const details = { receiver_id: String(receiverId), text: content, dev_id: devId };
   if (!confirm) return preview('send_message', { receiver_id: String(receiverId) }, details, '私信会立即发送给对方。确认后再设 confirm=true。');
+  client.requireCsrf();
   const timestamp = Math.floor(Date.now() / 1000);
   const result = await client.postSignedForm(
     'https://api.vc.bilibili.com/web_im/v1/web_im/send_msg',

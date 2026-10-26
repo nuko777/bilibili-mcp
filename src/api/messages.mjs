@@ -55,9 +55,17 @@ export function parseMessageContent(msg) {
 
 export async function listSessions(client, { limit = 20 } = {}) {
   client.requireLogin();
-  const json = await client.get(
+  const json = await client.getSigned(
     'https://api.vc.bilibili.com/session_svr/v1/session_svr/get_sessions',
-    { session_type: 1, group_fold: 1, unfollow_fold: 1, sort_rule: 2, build: 0, mobi_app: 'web' },
+    {
+      session_type: 1,
+      group_fold: 1,
+      unfollow_fold: 1,
+      sort_rule: 2,
+      build: 0,
+      mobi_app: 'web',
+      statistics: JSON.stringify({ appId: 100 }),
+    },
     { cacheTtl: 15_000 },
   );
   const sessionList = safeArray(json.data?.session_list).slice(0, Math.max(1, Math.min(Number(limit) || 20, 50)));

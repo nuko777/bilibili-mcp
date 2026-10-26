@@ -6,6 +6,7 @@ import { authStatus } from '../src/api/account.mjs';
 import { popularList, preciousList, rankList, weeklyIssues, weeklyList } from '../src/api/rankings.mjs';
 import { relatedVideos, search, toviewList, userInfo, userVideos, videoInfo, watchHistory } from '../src/api/videos.mjs';
 import { listComments } from '../src/api/comments.mjs';
+import { listDanmaku } from '../src/api/danmaku.mjs';
 import { getTranscript } from '../src/media/subtitles.mjs';
 import { videoFrames } from '../src/media/frames.mjs';
 import { listFavoriteFolders, listFavorites } from '../src/api/favorites.mjs';
@@ -84,6 +85,12 @@ await check('comments', async () => {
   if (!bvid) return 'skipped (set BILI_TEST_BVID)';
   const result = await listComments(client, { bvid, ps: 3, sort: 'time' });
   return `${result.total} comments`;
+});
+await check('danmaku', async () => {
+  if (!bvid) return 'skipped (set BILI_TEST_BVID)';
+  const result = await listDanmaku(client, { bvid, limit: 3 });
+  if (!result.items.length) throw new Error('该测试视频没有弹幕');
+  return `${result.source} ${result.returned}/${result.total}`;
 });
 await check('related_videos', async () => {
   if (!bvid) return 'skipped (set BILI_TEST_BVID)';

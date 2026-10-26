@@ -75,7 +75,7 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
   assert.ok(init.result.instructions.includes('bilibili-login'));
 
   const list = await client.send('tools/list', {});
-  assert.equal(list.result.tools.length, 42);
+  assert.equal(list.result.tools.length, 43);
   const names = new Set(list.result.tools.map((tool) => tool.name));
   for (const expected of [
     'auth_status',
@@ -95,6 +95,7 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
     'top_dynamic',
     'update_profile',
     'post_dynamic',
+    'recall_danmaku',
     'notifications',
     'messages',
     'list_followings',
@@ -108,6 +109,10 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
   assert.equal(frames.annotations.readOnlyHint, true);
   const coin = list.result.tools.find((tool) => tool.name === 'coin_video');
   assert.equal(coin.annotations.destructiveHint, true);
+  assert.equal(coin.annotations.idempotentHint, false);
+  const likeTool = list.result.tools.find((tool) => tool.name === 'like_video');
+  assert.equal(likeTool.annotations.destructiveHint, false);
+  assert.equal(likeTool.annotations.idempotentHint, true);
 
   const unknown = await client.send('tools/call', { name: 'nope', arguments: {} });
   assert.equal(unknown.result.isError, true);

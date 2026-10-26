@@ -89,6 +89,14 @@ export async function videoFrames(
     labels = true,
   } = {},
 ) {
+  const explicitTimes = Array.isArray(times)
+    ? times
+    : typeof times === 'string' && times.trim()
+      ? times.split(',').filter((part) => part.trim())
+      : [];
+  if (type !== 'grid' && explicitTimes.length > 12) {
+    throw new Error('frames 模式最多 12 个时间点；需要更多请使用 type="grid"');
+  }
   const view = await getView(client, { bvid, aid });
   const selected = choosePage(view, page);
   const duration = selected.duration || Number(view.duration) || 0;
@@ -283,32 +291,75 @@ export async function videoGrid(
   const outDir = path.join(paths().framesDir, `${safeName(view.bvid)}-${safeName(selected.cid)}`);
   await ensureDir(outDir);
 
-  const playData = await getPlayInfo(client, {
-    bvid: view.bvid,
-    cid: selected.cid,
-    qn: 80,
-    fourk: false,
-  });
-  const source = getFrameSource(playData, { maxHeight: 1080, preferCodec: 'avc' });
-  const allFrames = [];
   const errors = [];
-  for (let index = 0; index < frameTimes.length; index += 1) {
-    if (Date.now() >= deadline) {
-      errors.push('整体抽帧超时（180s）');
-      break;
-    }
-    const time = frameTimes[index];
-    const output = path.join(outDir, `grid_${String(index + 1).padStart(2, '0')}_${time.toFixed(1)}s.jpg`);
-    try {
-      const remaining = Math.max(5000, Math.min(30_000, deadline - Date.now()));
-      const result = await grabFrame({ url: source.url, time, output, height, timeoutMs: remaining });
-      allFrames.push({ index, time, file: result.file, size: result.size, source: 'dash' });
-    } catch (error) {
-      errors.push(`frame@${time}s: ${error.message}`);
+  let allFrames = [];
+  let source = null;
+  let frameSource = 'dash';
+  let sprite = null;
+  try {
+    const playData = await getPlayInfo(client, {
+      bvid: view.bvid,
+      cid: selected.cid,
+      qn: 80,
+      fourk: false,
+    });
+    source = getFrameSource(playData, { maxHeight: 1080, preferCodec: 'avc' });
+  } catch (error) {
+    errors.push(`playurl: ${error.message}`);
+  }
+
+  if (source) {
+    for (let index = 0; index < frameTimes.length; index += 1) {
+      if (Date.now() >= deadline) {
+        errors.push('整体抽帧超时（180s）');
+        break;
+      }
+      const time = frameTimes[index];
+      const output = path.join(outDir, `grid_${String(index + 1).padStart(2, '0')}_${time.toFixed(1)}s.jpg`);
+      try {
+        const remaining = Math.max(5000, Math.min(30_000, deadline - Date.now()));
+        const result = await grabFrame({ url: source.url, time, output, height, timeoutMs: remaining });
+        allFrames.push({ index, time, file: result.file, size: result.size, source: 'dash' });
+      } catch (error) {
+        errors.push(`frame@${time}s: ${error.message}`);
+      }
     }
   }
+
   if (allFrames.length !== total) {
-    throw new Error(`关键帧抽帧不完整（${allFrames.length}/${total}）：${errors.join(' | ') || '未知错误'}`);
+    // DASH can fail for paid/region-locked videos or individual seeks. Reuse
+    // the videoshot sprite path so grid still works when ffmpeg is installed.
+    try {
+      const fallback = await videoshotFrames(client, {
+        bvid: view.bvid,
+        cid: selected.cid,
+        frameTimes,
+        outDir,
+        width: 960,
+      });
+      if (fallback.spriteOnly || fallback.frames.length !== total) {
+        throw new Error(
+          fallback.spriteOnly
+            ? '未找到 ffmpeg，无法裁切 videoshot 雪碧图生成九宫格'
+            : `videoshot 仅生成 ${fallback.frames.length}/${total} 帧`,
+        );
+      }
+      allFrames = fallback.frames.map((frame, index) => ({
+        index,
+        time: frame.time,
+        file: frame.file,
+        size: frame.size,
+        source: 'videoshot',
+      }));
+      frameSource = 'videoshot';
+      sprite = fallback.spriteFile;
+      source = null;
+      errors.push('DASH 抽帧不完整，已回退到 videoshot 缩略图');
+    } catch (fallbackError) {
+      throw new Error(
+        `关键帧抽帧不完整（${allFrames.length}/${total}）。DASH 错误：${errors.join(' | ') || '未知'}；雪碧图错误：${fallbackError.message}`,
+      );
+    }
   }
 
   const grids = [];
@@ -356,7 +407,9 @@ export async function videoGrid(
     frame_height: height,
     labels: labels && labelsAvailable,
     source: 'grid',
-    stream: source.stream || null,
+    frame_source: frameSource,
+    sprite: sprite || undefined,
+    stream: source?.stream || null,
     times: frameTimes,
     frames: grids,
     errors: errors.length ? errors : undefined,

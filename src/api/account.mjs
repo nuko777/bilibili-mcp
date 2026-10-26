@@ -1,6 +1,3 @@
-import { BiliError } from '../core/errors.mjs';
-import { safeArray } from '../core/format.mjs';
-
 export async function nav(client) {
   const json = await client.get('https://api.bilibili.com/x/web-interface/nav', {}, { allowCodes: [0, -101], cacheTtl: 0 });
   return json;
@@ -66,45 +63,4 @@ export async function accountInfo(client) {
     sex: data.sex || '',
     rank: data.rank || '',
   };
-}
-
-export async function coinBalance(client) {
-  const json = await nav(client);
-  if (!json.data?.isLogin) {
-    throw new BiliError('登录态无效，无法读取硬币余额', { code: -101 });
-  }
-  return {
-    coins: json.data.money ?? null,
-    bcoin_balance: json.data.wallet?.bcoin_balance ?? null,
-    coupon_balance: json.data.wallet?.coupon_balance ?? null,
-  };
-}
-
-export function compactUnread(unread) {
-  if (!unread) return null;
-  return {
-    replies: unread.reply ?? unread.recv_reply ?? 0,
-    ats: unread.at ?? 0,
-    likes: unread.like ?? unread.recv_like ?? 0,
-    coins: unread.coin ?? 0,
-    favorites: unread.favorite ?? 0,
-    danmaku: unread.danmu ?? 0,
-    system: unread.sys_msg ?? 0,
-    up: unread.up ?? 0,
-  };
-}
-
-export function compactPrivateUnread(data) {
-  if (!data) return null;
-  return {
-    follow_unread: data.follow_unread ?? 0,
-    unfollow_unread: data.unfollow_unread ?? 0,
-    unfollow_push_msg: data.unfollow_push_msg ?? 0,
-    dustbin_unread: data.dustbin_unread ?? 0,
-    custom_unread: data.custom_unread ?? 0,
-  };
-}
-
-export function notificationItems(raw) {
-  return safeArray(raw?.items);
 }

@@ -10,7 +10,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 
 ## 1. 看懂一个视频
 
-用户给出 BV 号、av 号或链接时：
+用户给出 BV 号、av 号、完整链接或 `b23.tv` 短链时：
 
 1. `mcp__bilibili__video_info`：拿标题、UP 主、时长、cid、分P、标签、可用字幕语言。
 2. `mcp__bilibili__video_transcript`：
@@ -18,10 +18,11 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
    - 无字幕：不要编造内容，改用下一步。
 3. 无字幕或需要画面证据：`mcp__bilibili__video_frames`
    - 默认 3 帧（15%/50%/85%）；
-   - 可传 `times: ["0:30","1:20","50%"]`；
-   - 帧数多时传 `type:"grid"` + `count`，最多 9 张拼图、每张最多 9 帧，最后一张自动留黑位；`labels` 控制左上角序号；
+   - 可传 `times: ["0:30","1:20","50%"]`，`frames` 模式最多 12 个时间点；
+   - 帧数多时传 `type:"grid"` + `count`，最多 81 帧、9 张拼图、每张最多 9 帧，最后一张自动留黑位；`labels` 控制左上角序号；
+   - DASH 失败时 grid 也会回退到 `videoshot` 缩略图（需要 ffmpeg）；
    - 工具会返回图片；直接看图片描述画面、字幕、场景。
-4. 需要观众反馈：`mcp__bilibili__comments`（视频传 `video`，动态传 `dynamic_id`；先看热门，必要时按时间；传 `root` 可读完整楼中楼）。
+4. 需要观众反馈：`mcp__bilibili__comments`（视频传 `video`，动态传 `dynamic_id`；先看热门，必要时按时间；置顶评论在 `top_replies`，传 `root` 可读完整楼中楼）。
 5. 需要单条动态详情：`mcp__bilibili__dynamic_detail`；
 6. 需要关联内容：`mcp__bilibili__related_videos`。
 
@@ -35,7 +36,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 ## 2. 榜单 / 热门 / 每周必看
 
 - 排行榜：`mcp__bilibili__rank_list`，可传 `rid` 分区、`type`；
-- 综合热门：`mcp__bilibili__popular_list`；默认 H5 热门流（idx 滑动），`personalized=true` 走 Web 个性化推荐；
+- 综合热门：`mcp__bilibili__popular_list`；默认 Web 热门页，`feed:"h5"` 走 H5 热门流（idx 滑动），`personalized=true` 走 Web 个性化推荐；
 - 每周必看：先 `weekly_issues` 找期数，再 `weekly_list`（不传 number 默认最新）；
 - 标签由工具逐条补齐，默认只补前 20 条；需要更省请求时设 `include_tags=false`，或降低 `tag_limit`。
 
@@ -58,9 +59,10 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - `top_dynamic` 置顶/取消置顶自己的动态；`top:true/false`，默认 dry-run。
 - `update_profile` 修改昵称/签名；昵称消耗 6 硬币，必须先 dry-run 并让用户确认。
 - `toview_video` 添加/移除稍后再看，可逆；`add:true/false`，默认 dry-run。
-- `send_danmaku` 发送弹幕是公开内容，先 dry-run 并让用户确认文本。
+- `send_danmaku` 发送弹幕是公开内容，先 dry-run 并让用户确认文本；`recall_danmaku` 撤回自己的弹幕（通常限发送后 2 分钟内）。
 - 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；回复评论继续用 `root`/`parent`，工具会自动生成 `回复 @父作者 : 正文`。
 - 评论发图用 `image_paths`；动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`。
+- `post_dynamic` 传 `video` 可发布视频转发动态；传 `image_paths` 可发布图片动态。
 - `like_video`、`like_comment`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；
 - 收藏夹创建/改名/删除是写操作，必须先 dry-run；`create_favorite_folder` / `edit_favorite_folder` / `delete_favorite_folder` 分别对应。
 - 收藏单个夹传 `folder_id`，多个夹传 `folder_ids`；不知道 folder id 时先调 `list_favorites` 不带 folder_id。
@@ -88,4 +90,5 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - `-352`：风控 → 降低频率，等待几分钟；
 - 无字幕 → `video_frames`；
 - 抽帧失败 → 检查 ffmpeg，或依赖 `videoshot` 回退；
+- `b23.tv` 短链解析失败 → 让用户提供 BV 号或完整视频链接；
 - 写操作返回 `dry_run` → 正常，需 `confirm=true`。

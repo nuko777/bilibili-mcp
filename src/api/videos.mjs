@@ -222,7 +222,7 @@ export async function videoInfo(client, { bvid, aid, page = 1, includeSubtitles 
   };
 }
 
-export async function search(client, { keyword, type = 'video', page = 1, limit = 20, order = 'totalrank' } = {}) {
+export async function search(client, { keyword, type = 'video', page = 1, limit = 20, order = 'totalrank', minPlay = 0 } = {}) {
   if (!keyword || !String(keyword).trim()) throw new Error('keyword 不能为空');
   const searchType = type === 'user' ? 'bili_user' : 'video';
   const json = await client.getSigned(
@@ -255,12 +255,9 @@ export async function search(client, { keyword, type = 'video', page = 1, limit 
       })),
     };
   }
-  return {
-    type: 'video',
-    keyword,
-    page: json.data?.page || page,
-    total: json.data?.numResults || 0,
-    items: results.slice(0, limit).map((item) => ({
+  const minPlayCount = Math.max(0, Number(minPlay) || 0);
+  const videos = results
+    .map((item) => ({
       bvid: item.bvid || '',
       aid: String(item.aid || ''),
       title: stripHtml(item.title || ''),
@@ -268,7 +265,7 @@ export async function search(client, { keyword, type = 'video', page = 1, limit 
       cover: toHttps(item.pic || ''),
       author: stripHtml(item.author || ''),
       mid: String(item.mid || ''),
-      play: item.play || 0,
+      play: Number(item.play) || 0,
       danmaku: item.video_review || 0,
       duration: item.duration || '',
       pubdate: item.pubdate || 0,
@@ -277,7 +274,19 @@ export async function search(client, { keyword, type = 'video', page = 1, limit 
         .map((tag) => tag.trim())
         .filter(Boolean),
       description: truncate(stripHtml(item.description || ''), 200),
-    })),
+    }))
+    .filter((item) => item.play >= minPlayCount);
+  return {
+    type: 'video',
+    keyword,
+    page: json.data?.page || page,
+    total: json.data?.numResults || 0,
+    filtered: videos.length,
+    min_play: minPlayCount || undefined,
+    hint: minPlayCount && !videos.length
+      ? '当前排序下没有达到 min_play 的视频；可改用 order="totalrank" 或降低 min_play。'
+      : undefined,
+    items: videos.slice(0, limit),
   };
 }
 

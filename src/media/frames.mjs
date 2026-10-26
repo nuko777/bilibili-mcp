@@ -87,6 +87,7 @@ export async function videoFrames(
     fallback = true,
     frameHeight = 720,
     labels = true,
+    timeoutMs = 45_000,
   } = {},
 ) {
   const explicitTimes = Array.isArray(times)
@@ -121,7 +122,11 @@ export async function videoFrames(
     throw new Error('普通模式 count 最多 6；需要更多关键帧请传 type="grid"');
   }
   const frameTimes = resolveFrameTimes({ times, count: requestedCount ?? 3, duration });
-  const deadline = Date.now() + 120_000;
+  const safeTimeout = Math.max(10_000, Math.min(Number(timeoutMs) || 45_000, 180_000));
+  const deadline = Date.now() + Math.min(
+    180_000,
+    Math.max(120_000, safeTimeout * Math.min(frameTimes.length, 6)),
+  );
   const bvidSafe = safeName(view.bvid);
   const outDir = path.join(paths().framesDir, `${bvidSafe}-${safeName(selected.cid)}`);
   await ensureDir(outDir);
@@ -152,12 +157,30 @@ export async function videoFrames(
       }
       const time = frameTimes[i];
       const output = path.join(outDir, `${String(i + 1).padStart(2, '0')}_${time.toFixed(1)}s.jpg`);
-      try {
-        const remaining = Math.max(5000, Math.min(30_000, deadline - Date.now()));
-        const result = await grabFrame({ url: source.url, time, output, width, timeoutMs: remaining });
+      const retryWidth = Math.max(320, Math.min(Number(width) || 960, 640));
+      const widths = retryWidth < width ? [width, retryWidth] : [width];
+      let result = null;
+      let lastError = null;
+      for (const attemptWidth of widths) {
+        const remaining = deadline - Date.now();
+        if (remaining < 5000) break;
+        try {
+          result = await grabFrame({
+            url: source.url,
+            time,
+            output,
+            width: attemptWidth,
+            timeoutMs: Math.max(5000, Math.min(safeTimeout, remaining)),
+          });
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (result) {
         frames.push({ time, file: result.file, size: result.size, source: 'dash' });
-      } catch (error) {
-        errors.push(`frame@${time}s: ${error.message}`);
+      } else {
+        errors.push(`frame@${time}s: ${lastError?.message || '剩余时间不足'}`);
       }
     }
   }
@@ -172,7 +195,9 @@ export async function videoFrames(
       times: frameTimes,
       source: 'dash',
       stream: source?.stream || null,
+      timeout_ms: safeTimeout,
       frames,
+      partial: frames.length < frameTimes.length || undefined,
       errors: errors.length ? errors : undefined,
       ffmpeg: findFfmpeg(),
     };

@@ -530,7 +530,9 @@ export async function postComment(
   let visible = null;
   if (rpid) {
     const threadRoot = root ? String(root) : String(rpid);
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    // B站 may return state=11/17 while a comment is in review or its index is
+    // lagging. Keep polling briefly instead of telling the caller to delete it.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
         const info = await client.get(
           'https://api.bilibili.com/x/v2/reply/reply',
@@ -547,10 +549,11 @@ export async function postComment(
         state = null;
         visible = null;
       }
-      if (state !== null) break;
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 600));
+      if (state !== null && state !== 11 && state !== 17) break;
+      if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 1200));
     }
   }
+  const pendingReview = state === 11 || state === 17;
   return {
     ok: result.code === 0,
     action: 'comment',
@@ -564,14 +567,17 @@ export async function postComment(
     pictures: pictures.length ? pictures : undefined,
     state,
     visible,
+    pending_review: pendingReview,
     visibility_unknown: state === null,
     result: { code: result.code, message: result.message },
     note:
       state === null
         ? '评论已提交，但暂时无法确认公开状态（visibility_unknown=true）；请稍后复查评论列表。'
-        : state !== 0
-          ? `评论已提交，但当前未出现在公开列表（state=${state}；state=17 通常为审核中/仅自己可见）。`
-          : undefined,
+        : pendingReview
+          ? `评论已提交，B站当前 state=${state}（审核/索引延迟或仅自己可见）。这不代表要删除；请稍后复查评论列表。`
+          : state !== 0
+            ? `评论已提交，但当前未出现在公开列表（state=${state}）；请稍后复查，不要仅凭该状态删除。`
+            : undefined,
   };
 }
 

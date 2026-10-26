@@ -16,7 +16,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 2. `mcp__bilibili__video_transcript`：
    - 有字幕：直接用 `text` 和 `segments` 总结，引用时间点；
    - 无字幕：不要编造内容，改用下一步。
-3. 无字幕或需要画面证据：`mcp__bilibili__video_frames`
+3. 无字幕或需要画面证据：`mcp__bilibili__video_frames`（抽帧慢可传 `timeout_ms`，单帧失败会降宽度重试）
    - 默认 3 帧（15%/50%/85%）；
    - 可传 `times: ["0:30","1:20","50%"]`，`frames` 模式最多 12 个时间点；
    - 帧数多时传 `type:"grid"` + `count`，最多 81 帧、9 张拼图、每张最多 9 帧，最后一张自动留黑位；`labels` 控制左上角序号；
@@ -36,7 +36,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 ## 2. 榜单 / 热门 / 每周必看
 
 - 排行榜：`mcp__bilibili__rank_list`，可传 `rid` 分区、`type`；
-- 综合热门：`mcp__bilibili__popular_list`；默认 Web 热门页，`feed:"h5"` 走 H5 热门流（idx 滑动），`personalized=true` 走 Web 个性化推荐；
+- 综合热门：`mcp__bilibili__popular_list`；默认 Web 热门页，`feed:"h5"` 走 H5 热门流（10 卡一桶，`idx` 按 10 递增，已解析 `owner`/`stat.view`），`personalized=true` 走 Web 个性化推荐；
 - 每周必看：先 `weekly_issues` 找期数，再 `weekly_list`（不传 number 默认最新）；
 - 标签由工具逐条补齐，默认只补前 20 条；需要更省请求时设 `include_tags=false`，或降低 `tag_limit`。
 
@@ -78,8 +78,8 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - 登录态/硬币/未读：`mcp__bilibili__auth_status`；
 - 关注列表：`mcp__bilibili__list_followings`；
 - 收藏：`mcp__bilibili__list_favorites`；
-- 回复/@/赞：`mcp__bilibili__notifications`；
-- 私信：`mcp__bilibili__messages`（不传 talker_id 列会话，传了读聊天记录）；
+- 回复/@/赞：`mcp__bilibili__notifications`；回复/@ 的 `source.rpid`/`root_rpid`/`target_rpid` 可直接用于楼中楼；
+- 私信：`mcp__bilibili__messages`（不传 talker_id 列会话，传了读聊天记录）；读通知/聊天记录会触发 B站已读；
 - 动态：`mcp__bilibili__dynamic_feed`（关注流）、`mcp__bilibili__dynamic_detail`（单条）、`mcp__bilibili__user_dynamics`（指定用户/自己）。
 
 如果 `auth_status` 返回 `is_login: false`，转到 `bilibili-login` skill，不要尝试在 MCP 内提取登录态。

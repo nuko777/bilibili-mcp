@@ -107,14 +107,14 @@ export const tools = [
     name: 'popular_list',
     title: 'B站综合热门',
     description:
-      '获取 B 站热门视频。默认走 Web 热门页接口（/x/web-interface/popular）；feed="h5" 时走 H5 热门流（app.bilibili.com/x/v2/show/popular/index，9 卡滑动窗口，idx 游标）；personalized=true 走 Web 个性化推荐流。支持标签补齐。',
+      '获取 B 站热门视频。默认走 Web 热门页接口（/x/web-interface/popular）；feed="h5" 时走 H5 热门流（app.bilibili.com/x/v2/show/popular/index，10 卡一桶，idx 游标按 10 递增）；personalized=true 走 Web 个性化推荐流。支持标签补齐。',
     annotations: readOnly(),
     inputSchema: schema({
-      page: num('页码，从 1 开始；H5 下等价于 idx=page-1', { default: 1, minimum: 1 }),
-      ps: num('每页数量 1-20（H5 单窗口最多 9）', { default: 20, minimum: 1, maximum: 20 }),
+      page: num('页码，从 1 开始；H5 下等价于 idx=(page-1)*10', { default: 1, minimum: 1 }),
+      ps: num('每页数量 1-20（H5 单窗口最多 10）', { default: 20, minimum: 1, maximum: 20 }),
       feed: str('热门流来源', { enum: ['web', 'h5'], default: 'web' }),
       personalized: bool('是否使用 Web 个性化推荐（仅 feed=web 生效）', { default: false }),
-      idx: num('H5 滑动窗口游标，优先于 page', { minimum: 0 }),
+      idx: num('H5 分页游标，优先于 page；建议按 10 递增', { minimum: 0 }),
       limit: num('本次返回条数（可选）', { minimum: 1, maximum: 20 }),
       include_tags: bool('是否补齐标签（默认 true）', { default: true }),
       tag_limit: num('最多补标签条数', { default: 20, minimum: 0, maximum: 50 }),
@@ -217,7 +217,7 @@ export const tools = [
     name: 'video_frames',
     title: '视频关键帧截图',
     description:
-      '截取视频关键帧。type=frames 返回单帧列表（显式 times 最多 12 个）；type=grid 把最多 81 帧拼成最多 9 张图（每张最多 9 帧，最后一张自动接近正方形并留黑位），frames 返回所有拼图；DASH 抽帧失败时回退到 videoshot 缩略图（需要 ffmpeg）。支持 times 指定关键帧时间。',
+      '截取视频关键帧。type=frames 返回单帧列表（显式 times 最多 12 个）；type=grid 把最多 81 帧拼成最多 9 张图（每张最多 9 帧，最后一张自动接近正方形并留黑位），frames 返回所有拼图；DASH 抽帧失败时回退到 videoshot 缩略图（需要 ffmpeg）。支持 times 指定关键帧时间；可传 timeout_ms 放宽单帧超时，单帧失败会用更低宽度重试一次。',
     annotations: readOnly(),
     inputSchema: schema({
       video: videoRef,
@@ -236,6 +236,7 @@ export const tools = [
       page: num('分P 序号', { default: 1, minimum: 1 }),
       max_height: num('选流最大高度', { default: 1080, minimum: 360, maximum: 2160 }),
       fallback: bool('抽帧失败时回退 videoshot 缩略图', { default: true }),
+      timeout_ms: num('单帧 ffmpeg 超时（毫秒）；失败会自动降宽度重试一次', { default: 45000, minimum: 10000, maximum: 180000 }),
       max_images: num('随结果返回的图片数量 1-9', { default: 3, minimum: 1, maximum: 9 }),
     }, ['video']),
     handler: async (args, ctx) => {
@@ -263,6 +264,7 @@ export const tools = [
         page: args.page ?? 1,
         maxHeight: args.max_height ?? 1080,
         fallback: args.fallback !== false,
+        timeoutMs: args.timeout_ms ?? 45000,
       });
       let images = await framesAsImages(result.frames, { limit: args.max_images ?? 3 });
       if (!images.length && result.sprite) {
@@ -343,6 +345,7 @@ export const tools = [
       page: num('页码', { default: 1, minimum: 1 }),
       limit: num('返回条数 1-50', { default: 20, minimum: 1, maximum: 50 }),
       order: str('排序：totalrank / click / pubdate / dm / stow', { default: 'totalrank' }),
+      min_play: num('只保留播放量不低于该值的视频；0 表示不过滤', { default: 0, minimum: 0 }),
     }, ['keyword']),
     handler: async (args, ctx) =>
       search(ctx.client, {
@@ -351,6 +354,7 @@ export const tools = [
         page: args.page ?? 1,
         limit: args.limit ?? 20,
         order: args.order || 'totalrank',
+        minPlay: args.min_play ?? 0,
       }),
   },
   {
@@ -436,7 +440,7 @@ export const tools = [
     name: 'notifications',
     title: '回复 / @ / 点赞通知',
     description:
-      '读取 B 站消息中心通知。kind=unread 返回未读数；reply 返回“回复我的”；at 返回“@ 我的”；like 返回“收到的赞”。',
+      '读取 B 站消息中心通知。kind=unread 返回未读数；reply 返回“回复我的”；at 返回“@ 我的”；like 返回“收到的赞”。回复/@ 通知的 source 含 rpid、root_rpid、target_rpid，可直接用于楼中楼。读取回复/@/赞会更新消息中心已读状态（B站接口行为）。',
     annotations: readOnly(),
     inputSchema: schema({
       kind: str('通知类型', { enum: ['unread', 'reply', 'at', 'like'], default: 'unread' }),
@@ -455,7 +459,7 @@ export const tools = [
     name: 'messages',
     title: '私信会话 / 聊天记录',
     description:
-      '不传 talker_id 时列出私信会话；传 talker_id 时读取与该用户的聊天记录（按时间升序）。',
+      '不传 talker_id 时列出私信会话；传 talker_id 时读取与该用户的聊天记录（按时间升序）。读取聊天记录会标记该会话已读（B站接口行为）。',
     annotations: readOnly(),
     inputSchema: schema({
       talker_id: str('会话对方的 UID；不传则列出会话'),
@@ -662,7 +666,7 @@ export const tools = [
     name: 'post_comment',
     title: '发表评论 / 回复',
     description:
-      '在视频或动态下发表评论，可选本地图片；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。',
+      '在视频或动态下发表评论，可选本地图片；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。',
     annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,

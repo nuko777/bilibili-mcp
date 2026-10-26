@@ -78,7 +78,18 @@ export async function rankList(client, { rid = 0, type = 'all', limit = 20, incl
   };
 }
 
+function parseH5ViewCount(text) {
+  const match = String(text || '').match(/([\d.]+)\s*([万亿]?)\s*(?:观看|播放)/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return null;
+  const unit = match[2] === '亿' ? 100_000_000 : match[2] === '万' ? 10_000 : 1;
+  return Math.round(value * unit);
+}
+
 function normalizeH5Popular(card) {
+  const ownerName = card.owner?.name || card.upper?.name || card.right_desc_1 || '';
+  const view = parseH5ViewCount(card.right_desc_2);
   return normalizeVideo(
     {
       bvid: card.bvid,
@@ -86,8 +97,8 @@ function normalizeH5Popular(card) {
       title: card.title,
       pic: card.cover,
       duration: card.duration,
-      owner: card.owner || card.upper,
-      stat: card.stat,
+      owner: card.owner || card.upper || (ownerName ? { name: ownerName } : undefined),
+      stat: card.stat || (view !== null ? { view } : undefined),
       desc: card.desc,
       pubdate: card.pubdate,
       tname: card.tname,
@@ -121,8 +132,10 @@ async function h5PopularList(client, { idx = 0, ps = 20, limit, includeTags = tr
     feed: 'h5',
     personalized: false,
     idx: safeIdx,
-    next_idx: safeIdx + 1,
-    page: safeIdx + 1,
+    // The H5 endpoint repeats the same 10-card bucket for idx=1..10;
+    // increment by a whole bucket to avoid duplicate pages.
+    next_idx: safeIdx + 10,
+    page: Math.floor(safeIdx / 10) + 1,
     ps: safePs,
     no_more: cards.length < 9,
     returned: videos.length,
@@ -140,7 +153,7 @@ export async function popularList(
   const safePs = Math.max(1, Math.min(Number(ps) || 20, 20));
   if (feed === 'h5' && !personalized) {
     return h5PopularList(client, {
-      idx: idx === undefined || idx === null ? safePage - 1 : idx,
+      idx: idx === undefined || idx === null ? (safePage - 1) * 10 : idx,
       ps: safePs,
       limit,
       includeTags,

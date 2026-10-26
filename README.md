@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 31 个离线测试，不需要登录
+npm test          # 34 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -221,7 +221,7 @@ src/server.mjs
 - 优先 DASH 流 + ffmpeg，按 `times` 截帧。
 - `type:"frames"` 的显式 `times` 最多 12 个；需要更多时间点时用 `type:"grid"`（最多 81 帧）。
 - `type:"grid"` 每 9 帧拼一张，最多 9 张；最后一张自动接近正方形并留黑位。
-- 单帧默认高度 720p，宽度按原视频比例计算；`labels` 控制左上角序号。
+- 单帧默认高度 720p，宽度按原视频比例计算；`labels` 控制左上角序号；可用 `timeout_ms` 放宽单帧超时，失败会自动降宽度重试一次。
 - DASH 失败时回退 `videoshot` 雪碧图；无 ffmpeg 时返回整张雪碧图。grid 模式也会回退到 videoshot 缩略图（需要 ffmpeg）。
 - 媒体缓存位于 `BILI_CACHE_DIR` 或系统缓存目录。
 - 视频标识支持 BV 号、av 号、完整视频链接和 `b23.tv` 短链；短链通过跟随重定向解析。
@@ -236,7 +236,7 @@ src/server.mjs
 | 榜单 | `rank_list`、`popular_list`、`weekly_issues`、`weekly_list`、`precious_list` |
 | 视频 | `video_info`、`video_transcript`、`video_frames`（含九宫格）、`danmaku`、`related_videos` |
 | 评论 | `comments`（视频/动态，含楼中楼、state、@成员、置顶 `top_replies`） |
-| 搜索/用户 | `search`、`user_info`、`user_videos` |
+| 搜索/用户 | `search`（支持 `min_play` 过滤）、`user_info`、`user_videos` |
 | 社交 | `list_followings`、`list_followers`、`list_favorites` |
 | 消息 | `notifications`、`messages` |
 | 动态/历史 | `dynamic_feed`、`dynamic_detail`、`user_dynamics`（指定用户/自己）、`history`、`toview` |
@@ -293,7 +293,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 - `dynamic_feed` 优先使用 `offset` 游标；`page` 是便捷封装。
 - 其他列表使用 `page` / `ps` / `limit`，具体见工具 schema。
 - `user_dynamics` 不传 `mid` 时读取自己的空间动态；传 `mid` 读取任意用户动态。
-- `popular_list` 默认走 Web 热门页（`/x/web-interface/popular`）；`feed:"h5"` 时走 H5 热门流（`idx` 滑动窗口，每窗 9 条）；`personalized=true` 使用 Web 个性化推荐。H5 卡片字段较薄（通常无 UP 主/播放量），需要时用 `video_info` 补全。
+- `popular_list` 默认走 Web 热门页（`/x/web-interface/popular`）；`feed:"h5"` 时走 H5 热门流（10 卡一桶，`idx` 按 10 递增）；`personalized=true` 使用 Web 个性化推荐。H5 卡片的 UP 名/观看数已从 `right_desc_*` 解析到 `owner`/`stat.view`，其他统计字段不可用。
 - 标签补齐默认只补前 20 条；设置 `include_tags=false` 可减少请求。
 
 ## 配置
@@ -311,7 +311,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 31 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 34 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -348,6 +348,10 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 单次工具返回的图片总量约 12MB base64；超出部分会被省略，并在结果末尾提示省略数量。
 - B 站接口可能随时调整；端点集中在 `src/api/*`，错误会带原始 `code` 便于更新。
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
+- 读取通知/私信聊天记录会触发 B站已读状态，当前接口没有“只读不标已读”开关。
+- 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
+- 图片评论可能长期处于 `state=17`（仅自己可见），这是 B站审核/可见性行为，无法由 MCP 强制公开。
+- H5 热门卡片只提供标题/封面/BV/UP 名/观看数文本；UP 名和播放量由 `right_desc_*` 解析，其他统计字段不可用。
 
 ## 明确不实现
 
@@ -406,6 +410,7 @@ Cookie 等价于账号密码。
 - 视频评论与浏览器一致：只使用 WBI 游标接口（`/x/v2/reply/wbi/main`），不再使用 legacy `/x/v2/reply`；置顶评论单独返回 `top_replies`；动态评论 `is_up` 修复
 - `video_frames` 的 `grid` 在 DASH 失败时回退到 `videoshot` 缩略图
 - `post_dynamic` 支持传 `video` 发布视频转发动态（`scene:5` + `web_repost_src`）
+- H5 热门补 UP 名/播放量，并按 10 卡一桶翻页；`notifications` 补 `rpid/root_rpid/target_rpid`；`search` 支持 `min_play`；`video_frames` 支持 `timeout_ms` 和降宽度重试
 - `top_dynamic` 对新动态的 `4100001` 增加短延迟重试；`create_favorite_folder` 的 `privacy` 按 `attr & 1` 归一化
 - 修复 `delete_favorite_folder` 和 `favorite_video` 只传 `folder_id` 时被空 `folder_ids` 数组覆盖的问题
 - buffer 响应会识别 HTTP 200 的 JSON 错误并抛错，WBI 过期时能正常刷新；HTTP 403/412 也会重试

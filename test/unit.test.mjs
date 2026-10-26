@@ -7,7 +7,9 @@ import { parseMessageContent } from '../src/api/messages.mjs';
 import { normalizeVideo, parseVideoRef, resolveFrameTimes, formatDuration } from '../src/core/format.mjs';
 import { selectVideoStream } from '../src/media/playurl.mjs';
 import { BiliClient } from '../src/core/http.mjs';
-import { choosePage, resolveShortVideoRef } from '../src/api/videos.mjs';
+import { choosePage, resolveShortVideoRef, search } from '../src/api/videos.mjs';
+import { popularList } from '../src/api/rankings.mjs';
+import { replyNotifications } from '../src/api/notifications.mjs';
 import { runTool, toolMap, validateToolArgs } from '../src/tools/index.mjs';
 import { listComments, normalizeReply, resolveCommentTarget } from '../src/api/comments.mjs';
 import {
@@ -377,6 +379,80 @@ test('favorite folder edits read a fresh folder snapshot', async () => {
   assert.equal(result.details.next_title, 'new');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].options.cacheTtl, 0);
+});
+
+test('search min_play filters low-view results', async () => {
+  const fake = {
+    getSigned: async () => ({
+      data: {
+        page: 1,
+        numResults: 2,
+        result: [
+          { bvid: 'BV1a', title: 'zero', play: 0, author: 'a', mid: 1 },
+          { bvid: 'BV1b', title: 'popular', play: 5000, author: 'b', mid: 2 },
+        ],
+      },
+    }),
+  };
+  const result = await search(fake, { keyword: 'x', minPlay: 1000 });
+  assert.equal(result.filtered, 1);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].play, 5000);
+});
+
+test('reply notifications expose comment rpids', async () => {
+  const fake = {
+    get: async () => ({
+      data: {
+        cursor: { is_end: true },
+        items: [{
+          id: '9001',
+          user: { mid: 1, nickname: 'x' },
+          item: {
+            source_id: 265141324256,
+            root_id: 265141324000,
+            target_id: 0,
+            business_id: 17,
+            subject_id: 1073543151725051,
+            type: 'reply',
+            uri: 'https://www.bilibili.com/opus/1073543151725051921#reply265141324256',
+          },
+        }],
+      },
+    }),
+  };
+  const result = await replyNotifications(fake, { page: 1, ps: 1 });
+  assert.equal(result.items[0].source.rpid, '265141324256');
+  assert.equal(result.items[0].source.root_rpid, '265141324000');
+  assert.equal(result.items[0].source.target_rpid, null);
+  assert.equal(result.items[0].source.subject_id, '1073543151725051');
+});
+
+test('H5 popular enriches owner/view and advances by a full bucket', async () => {
+  const calls = [];
+  const fake = {
+    get: async (url, params) => {
+      calls.push({ url, params });
+      return {
+        data: {
+          0: {
+            bvid: 'BV1h5popular1',
+            param: '117498947046682',
+            title: 'H5 card',
+            cover: '//i0.hdslb.com/test.jpg',
+            right_desc_1: '三颗门牙X',
+            right_desc_2: '30.2万观看 · 2天前',
+          },
+        },
+      };
+    },
+  };
+  const result = await popularList(fake, { feed: 'h5', page: 2, ps: 1, includeTags: false });
+  assert.equal(calls[0].params.idx, 10);
+  assert.equal(result.next_idx, 20);
+  assert.equal(result.page, 2);
+  assert.equal(result.items[0].owner.name, '三颗门牙X');
+  assert.equal(result.items[0].stat.view, 302000);
 });
 
 test('b23 short links resolve to a video reference and refuse foreign redirects', async () => {

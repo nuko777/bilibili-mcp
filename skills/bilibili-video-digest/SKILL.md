@@ -61,7 +61,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - `toview_video` 添加/移除稍后再看，可逆；`add:true/false`，默认 dry-run。
 - `send_danmaku` 发送弹幕是公开内容，先 dry-run 并让用户确认文本；`recall_danmaku` 撤回自己的弹幕（通常限发送后 2 分钟内）。
 - 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；回复评论继续用 `root`/`parent`，工具会自动生成 `回复 @父作者 : 正文`。
-- 评论发图用 `image_paths`；动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`。
+- 评论带图：MCP API 可能仅自己可见，会返回 `visibility_warning`；请按 `bilibili-browser-comment` skill 在浏览器中执行 `scripts/post-image-comment-browser.js`。动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`（仅文本）。
 - `post_dynamic` 传 `video` 可发布视频转发动态；传 `image_paths` 可发布图片动态。
 - `like_video`、`like_comment`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；
 - 收藏夹创建/改名/删除是写操作，必须先 dry-run；`create_favorite_folder` / `edit_favorite_folder` / `delete_favorite_folder` 分别对应。

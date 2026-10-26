@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 34 个离线测试，不需要登录
+npm test          # 35 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -252,7 +252,7 @@ src/server.mjs
 | `create_favorite_folder` | 创建收藏夹 |
 | `edit_favorite_folder` | 修改收藏夹名称/简介/公开状态 |
 | `delete_favorite_folder` | 删除一个或多个收藏夹 |
-| `post_comment` | 视频/动态评论、楼中楼回复、@、可选本地图片、可同时转发动态 |
+| `post_comment` | 视频/动态评论、楼中楼回复、@、可选本地图片、可同时转发动态；API 带图可能仅自己可见，会返回 warning，改按 `bilibili-browser-comment` skill |
 | `delete_comment` | 删除自己的视频/动态评论；不可撤销 |
 | `delete_dynamic` | 删除自己的动态；不可撤销 |
 | `top_dynamic` | 置顶/取消置顶自己的动态 |
@@ -311,7 +311,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 34 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 35 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -350,7 +350,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
 - 读取通知/私信聊天记录会触发 B站已读状态，当前接口没有“只读不标已读”开关；`notifications` 和 `messages` 的结果会带 `read_side_effect` / `read_note` 说明。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
-- 图片评论可能长期处于 `state=17`（仅自己可见），这是 B站审核/可见性行为，无法由 MCP 强制公开。
+- API 图片评论可能仅自己可见（缺少浏览器 `b_wet` / Gaia token）；`post_comment` 带图会返回 `visibility_warning`，请按 `bilibili-browser-comment` skill 在已登录浏览器中执行 `scripts/post-image-comment-browser.js`。
 - H5 热门卡片只提供标题/封面/BV/UP 名/观看数文本；UP 名和播放量由 `right_desc_*` 解析，其他统计字段不可用。
 
 ## 明确不实现
@@ -489,7 +489,7 @@ src/
   core/                 HTTP、WBI、Cookie、配置、错误、格式化
   api/                  榜单、视频、互动、关系、收藏、消息、动态
   media/                字幕、关键帧、播放流、ffmpeg
-scripts/                Cookie 导入、只读验收
+scripts/                Cookie 导入、只读验收、浏览器图片评论脚本
 skills/                 DSH skills
 test/                   离线 / MCP / live 测试
 ```

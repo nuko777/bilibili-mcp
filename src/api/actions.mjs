@@ -8,6 +8,9 @@ import { getDynamicDetail, normalizeDynamic, resetDynamicFeedCursors } from './d
 import { accountInfo } from './account.mjs';
 import { listFavoriteFolders } from './favorites.mjs';
 
+const IMAGE_COMMENT_VISIBILITY_WARNING =
+  'B站 API 图片评论可能仅自己可见（缺少浏览器 b_wet / Gaia 风控 token）。请按 bilibili-browser-comment skill 的说明，在已登录浏览器中执行 scripts/post-image-comment-browser.js 发布。';
+
 function preview(action, target, details = {}, hint = '未执行任何写操作。将 confirm 设为 true 后才会真正执行。') {
   return {
     ok: true,
@@ -462,6 +465,7 @@ export async function postComment(
     images: paths,
     sync_to_dynamic: Boolean(syncToDynamic),
     warning: '评论会公开发布，且会以当前账号身份出现。',
+    image_visibility_warning: paths.length ? IMAGE_COMMENT_VISIBILITY_WARNING : undefined,
   };
   if (!confirm) return preview('comment', target, details, '评论是公开内容。确认文案后再设 confirm=true。');
   client.requireCsrf();
@@ -569,6 +573,7 @@ export async function postComment(
     visible,
     pending_review: pendingReview,
     visibility_unknown: state === null,
+    visibility_warning: pictures.length ? IMAGE_COMMENT_VISIBILITY_WARNING : undefined,
     result: { code: result.code, message: result.message },
     note:
       state === null

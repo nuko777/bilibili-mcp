@@ -666,7 +666,7 @@ export const tools = [
     name: 'post_comment',
     title: '发表评论 / 回复',
     description:
-      '在视频或动态下发表评论，可选本地图片；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。',
+      '在视频或动态下发表评论，可选本地图片；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。注意：API 图片评论可能仅自己可见；带图时请按 bilibili-browser-comment skill 在已登录浏览器中执行 scripts/post-image-comment-browser.js。',
     annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,

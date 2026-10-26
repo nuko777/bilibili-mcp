@@ -1,5 +1,8 @@
 import { safeArray, toHttps } from '../core/format.mjs';
 
+const NOTIFICATION_READ_NOTE =
+  '读取回复/@/赞通知会更新消息中心已读状态；当前接口没有“只读不标已读”开关。';
+
 function normalizeUser(user) {
   return {
     mid: user?.mid ? String(user.mid) : '',
@@ -98,6 +101,8 @@ export async function replyNotifications(client, { page = 1, ps = 20 } = {}) {
   return {
     cursor: json.data?.cursor || null,
     last_view_at: json.data?.last_view_at || 0,
+    read_side_effect: true,
+    read_note: NOTIFICATION_READ_NOTE,
     items: safeArray(json.data?.items).map(normalizeReplyItem),
   };
 }
@@ -107,6 +112,8 @@ export async function atNotifications(client, { page = 1, ps = 20 } = {}) {
   return {
     cursor: json.data?.cursor || null,
     last_view_at: json.data?.last_view_at || 0,
+    read_side_effect: true,
+    read_note: NOTIFICATION_READ_NOTE,
     items: safeArray(json.data?.items).map(normalizeReplyItem),
   };
 }
@@ -122,5 +129,7 @@ export async function likeNotifications(client, { page = 1, ps = 20 } = {}) {
       cursor: json.data?.total?.cursor || null,
       items: safeArray(json.data?.total?.items).map(normalizeLikeItem),
     },
+    read_side_effect: true,
+    read_note: NOTIFICATION_READ_NOTE,
   };
 }

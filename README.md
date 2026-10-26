@@ -348,7 +348,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 单次工具返回的图片总量约 12MB base64；超出部分会被省略，并在结果末尾提示省略数量。
 - B 站接口可能随时调整；端点集中在 `src/api/*`，错误会带原始 `code` 便于更新。
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
-- 读取通知/私信聊天记录会触发 B站已读状态，当前接口没有“只读不标已读”开关。
+- 读取通知/私信聊天记录会触发 B站已读状态，当前接口没有“只读不标已读”开关；`notifications` 和 `messages` 的结果会带 `read_side_effect` / `read_note` 说明。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
 - 图片评论可能长期处于 `state=17`（仅自己可见），这是 B站审核/可见性行为，无法由 MCP 强制公开。
 - H5 热门卡片只提供标题/封面/BV/UP 名/观看数文本；UP 名和播放量由 `right_desc_*` 解析，其他统计字段不可用。

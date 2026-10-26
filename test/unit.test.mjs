@@ -422,6 +422,8 @@ test('reply notifications expose comment rpids', async () => {
     }),
   };
   const result = await replyNotifications(fake, { page: 1, ps: 1 });
+  assert.equal(result.read_side_effect, true);
+  assert.match(result.read_note, /已读/);
   assert.equal(result.items[0].source.rpid, '265141324256');
   assert.equal(result.items[0].source.root_rpid, '265141324000');
   assert.equal(result.items[0].source.target_rpid, null);

@@ -96,7 +96,7 @@
       for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
       blob = new Blob([bytes], { type: imageType || 'image/png' });
     } else if (imageUrl) {
-      const response = await fetch(imageUrl, { credentials: 'include' });
+      const response = await fetch(imageUrl);
       if (!response.ok) throw new Error(`图片下载失败 HTTP ${response.status}`);
       blob = await response.blob();
     } else {
@@ -204,17 +204,26 @@
     if (!content) throw new Error('text 不能为空');
     if (!imageBase64 && !imageUrl) throw new Error('需要 imageBase64 或 imageUrl');
 
-    const host = findCommentHost();
-    if (!host) {
+    let comments = findCommentHost();
+    if (!comments) {
       // 动态/视频的评论组件是懒加载的，先滚动到评论区。
+      window.scrollTo(0, document.body.scrollHeight * 0.55);
+      await sleep(1800);
       window.scrollTo(0, document.body.scrollHeight);
-      await sleep(2000);
+      await sleep(1800);
+      comments = findCommentHost();
     }
-    const comments = findCommentHost();
+    let box = comments ? findCommentBox(comments) : null;
+    // Some video pages mount the host before the comment box; retry after
+    // scrolling instead of failing immediately.
+    for (let attempt = 0; !box && attempt < 3; attempt += 1) {
+      window.scrollBy(0, 700);
+      await sleep(1200);
+      comments = findCommentHost();
+      box = comments ? findCommentBox(comments) : null;
+    }
     if (!comments) throw new Error('页面没有评论组件（bili-comments）');
-
-    const box = findCommentBox(comments);
-    if (!box) throw new Error('找不到评论框（bili-comment-box）');
+    if (!box) throw new Error('找不到评论框（bili-comment-box）；请确认评论区已加载并且页面已登录');
 
     const editor = await activateBox(box);
     setEditorText(editor, content);

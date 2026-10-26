@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.4`（npm dist-tag：`beta`）：
+已发布 `0.1.0-beta.5`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -345,7 +345,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.4`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.4)（prerelease，含 npm tarball）。
+已发布：[`v0.1.0-beta.5`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.5)（prerelease，含 npm tarball）。
 
 ## 后续计划
 
@@ -413,8 +413,9 @@ Cookie 等价于账号密码。
 
 ## Changelog
 
-### Unreleased
+### 0.1.0-beta.5 — 2026-10-27
 
+- 新增 `bilibili-ops` 账号运营 skill；统一 `bilibili-login` / `bilibili-video-digest` / `bilibili-browser-comment` 的职责边界，README 增加 Skills 一览
 - 工具参数校验拒绝未知字段与显式 `null`，避免拼写错误和 `like:null` 之类被静默接受
 - 写工具 annotations 区分可逆与破坏性操作（点赞/收藏/关注等不再标记为 destructive）
 - 编辑/删除收藏夹前强制读取最新快照，避免旧缓存覆盖并发修改

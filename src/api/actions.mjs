@@ -467,13 +467,11 @@ export async function postComment(
     mention_user_ids: mentionIds.length ? mentionIds : undefined,
     root: root ? String(root) : undefined,
     parent: parent ? String(parent) : undefined,
-    images: paths,
     sync_to_dynamic: Boolean(syncToDynamic),
     warning: '评论会公开发布，且会以当前账号身份出现。',
   };
   if (!confirm) return preview('comment', target, details, '评论是公开内容。确认文案后再设 confirm=true。');
   client.requireCsrf();
-  await assertImageBatch(paths);
   const mentions = [];
   for (const mid of mentionIds) {
     const user = await userInfo(client, { mid });
@@ -808,7 +806,9 @@ async function dynamicTarget(client, dynamicId) {
     // specific race; network/WBI/auth failures must still surface.
     const code = Number(error.code);
     const message = String(error.message || '');
-    if (code !== 500 && !message.includes('MISS_OPUS_DETAIL_DATA')) throw error;
+    const detailIndexMiss = message.includes('MISS_OPUS_DETAIL_DATA')
+      || (code === 500 && message.includes('/x/polymer/web-dynamic/v1/detail 失败'));
+    if (!detailIndexMiss) throw error;
     return {
       detail: false,
       target: {

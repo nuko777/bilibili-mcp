@@ -90,7 +90,7 @@ function parseH5ViewCount(text) {
 function normalizeH5Popular(card) {
   const ownerName = card.owner?.name || card.upper?.name || card.right_desc_1 || '';
   const view = parseH5ViewCount(card.right_desc_2);
-  return normalizeVideo(
+  const video = normalizeVideo(
     {
       bvid: card.bvid,
       aid: card.param || card.id,
@@ -106,6 +106,10 @@ function normalizeH5Popular(card) {
     },
     'popular_h5',
   );
+  // H5 cards only expose the view count in right_desc_2; don't pretend the
+  // unavailable metrics are real zeros.
+  if (video && !card.stat) video.stat = view !== null ? { view } : null;
+  return video;
 }
 
 async function h5PopularList(client, { idx = 0, ps = 20, limit, includeTags = true, tagLimit = 20 } = {}) {
@@ -137,7 +141,7 @@ async function h5PopularList(client, { idx = 0, ps = 20, limit, includeTags = tr
     next_idx: safeIdx + 10,
     page: Math.floor(safeIdx / 10) + 1,
     ps: safePs,
-    no_more: cards.length < 9,
+    no_more: cards.length < 10,
     returned: videos.length,
     tags_complete: includeTags ? tagsComplete : false,
     tags_included: Boolean(includeTags),

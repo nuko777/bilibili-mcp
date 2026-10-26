@@ -116,6 +116,7 @@ export async function videoFrames(
       frameHeight,
       labels,
       page,
+      timeoutMs,
     });
   }
   if (requestedCount !== null && requestedCount > 6) {
@@ -152,7 +153,7 @@ export async function videoFrames(
   if (source) {
     for (let i = 0; i < frameTimes.length; i += 1) {
       if (Date.now() >= deadline) {
-        errors.push('整体抽帧超时（120s）');
+        errors.push('整体抽帧超时');
         break;
       }
       const time = frameTimes[i];
@@ -301,7 +302,7 @@ function gridLayout(count) {
 
 export async function videoGrid(
   client,
-  { bvid, aid, times, count = 9, frameHeight = 720, labels = true, page = 1 } = {},
+  { bvid, aid, times, count = 9, frameHeight = 720, labels = true, page = 1, timeoutMs = 45_000 } = {},
 ) {
   const total = Math.trunc(Number(count));
   if (!Number.isFinite(total) || total < 1 || total > 81) {
@@ -312,6 +313,7 @@ export async function videoGrid(
   const selected = choosePage(view, page);
   const duration = selected.duration || Number(view.duration) || 0;
   const frameTimes = gridTimes({ times, cells: total, duration });
+  const safeTimeout = Math.max(10_000, Math.min(Number(timeoutMs) || 45_000, 180_000));
   const deadline = Date.now() + 180_000;
   const outDir = path.join(paths().framesDir, `${safeName(view.bvid)}-${safeName(selected.cid)}`);
   await ensureDir(outDir);
@@ -342,7 +344,7 @@ export async function videoGrid(
       const time = frameTimes[index];
       const output = path.join(outDir, `grid_${String(index + 1).padStart(2, '0')}_${time.toFixed(1)}s.jpg`);
       try {
-        const remaining = Math.max(5000, Math.min(30_000, deadline - Date.now()));
+        const remaining = Math.max(5000, Math.min(safeTimeout, deadline - Date.now()));
         const result = await grabFrame({ url: source.url, time, output, height, timeoutMs: remaining });
         allFrames.push({ index, time, file: result.file, size: result.size, source: 'dash' });
       } catch (error) {

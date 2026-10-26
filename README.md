@@ -183,7 +183,7 @@ src/server.mjs
 - CSRF：写请求使用表单字段 `csrf`（不是 `csrf_token`）。
 - WBI：`wts` + `w_rid`；签名和最终 query 使用同一个编码函数，避免 `%20` / `+` 与 `!'()*` 二次编码不一致。
 - 图片上传：手写 multipart 并显式设置 `Content-Length`；Node `FormData` 的 chunked 编码会被 B站 CSRF 解析拒绝。
-- 评论带图：`pictures` 字段是 JSON 字符串；图片走同一个 BFS 上传接口。
+- 评论带图：MCP `post_comment` 只支持文本，`image_paths` 会被拒绝；图片评论用浏览器脚本。
 - 视频评论的 `Referer` 必须是视频页 URL；用默认首页会被判为低信任请求并进入 `state=17`。
 
 ### 关键接口
@@ -219,12 +219,12 @@ src/server.mjs
 ### 关键帧
 
 - 优先 DASH 流 + ffmpeg，按 `times` 截帧。
-- `type:"frames"` 的显式 `times` 最多 12 个；需要更多时间点时用 `type:"grid"`（最多 81 帧）。
+- `type:"frames"` 的显式 `times` 最多 12 个；需要更多时间点时用 `type:"grid"`（最多 81 帧，grid 同样支持 `timeout_ms`）。
 - `type:"grid"` 每 9 帧拼一张，最多 9 张；最后一张自动接近正方形并留黑位。
 - 单帧默认高度 720p，宽度按原视频比例计算；`labels` 控制左上角序号；可用 `timeout_ms` 放宽单帧超时，失败会自动降宽度重试一次。
 - DASH 失败时回退 `videoshot` 雪碧图；无 ffmpeg 时返回整张雪碧图。grid 模式也会回退到 videoshot 缩略图（需要 ffmpeg）。
 - 媒体缓存位于 `BILI_CACHE_DIR` 或系统缓存目录。
-- 视频标识支持 BV 号、av 号、完整视频链接和 `b23.tv` 短链；短链通过跟随重定向解析。
+- 视频标识支持 BV 号、av 号、完整视频链接和 `b23.tv` / `bili2233.cn` / `b23.wtf` 短链；短链只跟随 B站域名并限制总超时。
 
 ## 工具
 
@@ -347,7 +347,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 单次工具返回的图片总量约 12MB base64；超出部分会被省略，并在结果末尾提示省略数量。
 - B 站接口可能随时调整；端点集中在 `src/api/*`，错误会带原始 `code` 便于更新。
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
-- 读取通知/私信聊天记录会触发 B站已读状态，当前接口没有“只读不标已读”开关；`notifications` 和 `messages` 的结果会带 `read_side_effect` / `read_note` 说明。
+- 读取通知/聊天记录会触发 B站已读状态；`notifications` 的 feed 结果、`messages` 的聊天记录都带 `read_side_effect` / `read_note`；未读数查询和会话列表带 `read_side_effect:false` / `read_note`。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
 - `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。请按 `bilibili-browser-comment` skill 在已登录浏览器中执行 `scripts/post-image-comment-browser.js`。
 - H5 热门卡片只提供标题/封面/BV/UP 名/观看数文本；UP 名和播放量由 `right_desc_*` 解析，其他统计字段不可用。
@@ -365,6 +365,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 所有写工具默认 dry-run；只有 `confirm=true` 才会真正执行。
 - `coin_video` 不可撤销；单稿最多 2 枚，执行前会检查当前已投数量。
 - 发布评论、动态、私信是公开/对外行为；执行前确认目标和文案。
+- 评论/弹幕正文不要出现“脚本、自动化、MCP、测试、验证”等词，容易触发风控；用普通用户口吻。
 - 服务端对非 GET 请求默认不自动重试，避免重复评论/私信/投币；客户端超时重试仍可能造成重复，重要写操作建议先 dry-run，执行后用读取工具确认。
 - 删除评论/动态/收藏夹不可撤销；昵称修改会消耗 6 个硬币。
 
@@ -380,7 +381,7 @@ Cookie 等价于账号密码。
 
 ### 图片上传
 
-`post_dynamic` / `post_comment` 的 `image_paths` 按设计允许读取本机任意可读图片路径，不限制目录。这是本地特权能力：
+`post_dynamic` 的 `image_paths` 按设计允许读取本机任意可读图片路径，不限制目录。`post_comment` 的 `image_paths` 会在读取文件前直接拒绝。这是本地特权能力：
 
 - 不要在不可信提示、不可信 agent 或远程调用下开放写工具。
 - 只上传你明确知道路径和内容的图片。

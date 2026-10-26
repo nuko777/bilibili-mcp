@@ -58,6 +58,15 @@ function readOnly() {
   return { readOnlyHint: true, openWorldHint: true };
 }
 
+function readWithSideEffects() {
+  return {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  };
+}
+
 function write({ destructive = false, idempotent = false } = {}) {
   return {
     readOnlyHint: false,
@@ -441,7 +450,7 @@ export const tools = [
     title: '回复 / @ / 点赞通知',
     description:
       '读取 B 站消息中心通知。kind=unread 返回未读数；reply 返回“回复我的”；at 返回“@ 我的”；like 返回“收到的赞”。回复/@ 通知的 source 含 rpid、root_rpid、target_rpid，可直接用于楼中楼。读取回复/@/赞会更新消息中心已读状态（B站接口行为）。',
-    annotations: readOnly(),
+    annotations: readWithSideEffects(),
     inputSchema: schema({
       kind: str('通知类型', { enum: ['unread', 'reply', 'at', 'like'], default: 'unread' }),
       page: num('页码（reply/at/like 有效）', { default: 1, minimum: 1 }),
@@ -460,7 +469,7 @@ export const tools = [
     title: '私信会话 / 聊天记录',
     description:
       '不传 talker_id 时列出私信会话；传 talker_id 时读取与该用户的聊天记录（按时间升序）。读取聊天记录会标记该会话已读（B站接口行为）。',
-    annotations: readOnly(),
+    annotations: readWithSideEffects(),
     inputSchema: schema({
       talker_id: str('会话对方的 UID；不传则列出会话'),
       limit: num('会话数或消息数 1-100', { default: 20, minimum: 1, maximum: 100 }),

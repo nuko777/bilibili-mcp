@@ -88,6 +88,7 @@ export async function listSessions(client, { limit = 20 } = {}) {
   }
   return {
     total: json.data?.session_list?.length || sessionList.length,
+    read_side_effect: false,
     read_note: 'unread_count 是本次会话列表快照；打开聊天记录会标记该会话已读。',
     items: sessionList.map((session) => {
       const talkerId = String(session.talker_id || '');

@@ -93,6 +93,8 @@ export async function unreadNotifications(client) {
     system: data.sys_msg ?? 0,
     up: data.up ?? 0,
     raw: data,
+    read_side_effect: false,
+    read_note: '未读数查询不会标记通知已读。',
   };
 }
 

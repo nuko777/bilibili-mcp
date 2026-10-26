@@ -12,7 +12,7 @@
  *          imageType: "image/png",
  *        })
  *
- * 也支持 imageUrl（页面能访问的 http/https 图片）；本地文件请由 agent 读成 base64。
+ * 只接受 imageBase64；本地文件由 agent 读成 base64 后传入。
  * 返回 { ok, rpid, link, state, text, image }。失败会 throw Error。
  *
  * 说明：B站网页评论请求带 b_wet / x-bili-metadata-gaia-bin 等浏览器风控 token，
@@ -79,38 +79,42 @@
     }
     if ((editor.textContent || '').trim() !== text) {
       editor.textContent = text;
-      editor.dispatchEvent(new InputEvent('input', {
-        bubbles: true,
-        inputType: 'insertText',
-        data: text,
-      }));
+      for (const type of ['beforeinput', 'input', 'keyup']) {
+        try {
+          if (type === 'keyup') {
+            editor.dispatchEvent(new KeyboardEvent(type, { bubbles: true, key: 'a' }));
+          } else {
+            editor.dispatchEvent(new InputEvent(type, {
+              bubbles: true,
+              inputType: 'insertText',
+              data: text,
+            }));
+          }
+        } catch {
+          // Ignore event-constructor differences in older browsers.
+        }
+      }
     }
   }
 
-  async function base64ToFile({ imageBase64, imageUrl, imageName, imageType }) {
-    let blob;
-    if (imageBase64) {
-      const clean = String(imageBase64).replace(/^data:[^,]+,/, '');
-      const binary = atob(clean);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-      blob = new Blob([bytes], { type: imageType || 'image/png' });
-    } else if (imageUrl) {
-      const response = await fetch(imageUrl);
-      if (!response.ok) throw new Error(`图片下载失败 HTTP ${response.status}`);
-      blob = await response.blob();
-    } else {
-      throw new Error('需要 imageBase64 或 imageUrl');
-    }
+  async function base64ToFile({ imageBase64, imageName, imageType }) {
+    if (!imageBase64) throw new Error('需要 imageBase64');
+    const clean = String(imageBase64).replace(/^data:[^,]+,/, '');
+    const binary = atob(clean);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: imageType || 'image/png' });
     return new File([blob], imageName || 'image.png', {
-      type: imageType || blob.type || 'image/png',
+      type: imageType || 'image/png',
     });
   }
 
   function findImageButton(box) {
     const buttons = [...(box.shadowRoot?.querySelectorAll('#footer button.tool-btn') || [])];
-    // footer 顺序：表情、@、图片；图片通常是第三个。
-    return buttons[2] || null;
+    // Prefer the button carrying the image icon; fall back to the known third slot.
+    return buttons.find((button) => /image_line|image/i.test(button.innerHTML || ''))
+      || buttons[2]
+      || null;
   }
 
   async function captureFileInput(box, imageButton) {
@@ -129,7 +133,11 @@
     } finally {
       HTMLInputElement.prototype.click = originalClick;
     }
-    if (!captured) captured = deepQuery(box.shadowRoot, 'input[type=file]');
+    if (!captured) {
+      const upload = deepQuery(box.shadowRoot, 'bili-comment-pictures-upload');
+      captured = deepQuery(upload?.shadowRoot, 'input[type=file]')
+        || deepQuery(box.shadowRoot, 'input[type=file]');
+    }
     if (!captured) throw new Error('没有捕获到图片 file input；浏览器可能使用系统文件选择器，请改用 agent browser 的上传文件能力');
     return captured;
   }
@@ -166,9 +174,25 @@
     return false;
   }
 
+  async function waitForPublishedComment(host, text, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const renderers = deepQueryAll(host.shadowRoot, 'bili-comment-renderer');
+      if (renderers.some((el) => (el.shadowRoot?.innerText || el.innerText || '').includes(text))) {
+        return true;
+      }
+      await sleep(300);
+    }
+    return false;
+  }
+
   async function waitForRpid(timeoutMs) {
-    // The page normally uses fetch for /x/v2/reply/add. Patch it only around submit.
+    // Capture fetch and XHR around submit; either transport can be used by the
+    // page. The caller still has a DOM-success fallback.
     const originalFetch = window.fetch;
+    const OriginalXHR = window.XMLHttpRequest;
+    const originalOpen = OriginalXHR.prototype.open;
+    const originalSend = OriginalXHR.prototype.send;
     let captured = null;
     window.fetch = async function patchedFetch(...args) {
       const response = await originalFetch.apply(this, args);
@@ -178,12 +202,32 @@
           response.clone().json().then((json) => { captured = json; }).catch(() => {});
         }
       } catch {
-        // Ignore response-inspection errors; the UI result is still authoritative.
+        // Ignore response-inspection errors; the DOM fallback still applies.
       }
       return response;
     };
+    OriginalXHR.prototype.open = function patchedOpen(method, url, ...rest) {
+      this.__biliCommentUrl = String(url || '');
+      return originalOpen.call(this, method, url, ...rest);
+    };
+    OriginalXHR.prototype.send = function patchedSend(...args) {
+      try {
+        this.addEventListener('load', () => {
+          if (String(this.__biliCommentUrl || '').includes('/x/v2/reply/add')) {
+            try { captured = JSON.parse(this.responseText); } catch { /* ignore */ }
+          }
+        });
+      } catch {
+        // Ignore listener failures.
+      }
+      return originalSend.apply(this, args);
+    };
     return {
-      restore: () => { window.fetch = originalFetch; },
+      restore: () => {
+        window.fetch = originalFetch;
+        OriginalXHR.prototype.open = originalOpen;
+        OriginalXHR.prototype.send = originalSend;
+      },
       wait: async () => {
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline && !captured) await sleep(250);
@@ -195,14 +239,13 @@
   window.postBiliImageComment = async function postBiliImageComment({
     text,
     imageBase64,
-    imageUrl,
     imageName = 'image.png',
     imageType = 'image/png',
     timeoutMs = 120_000,
   } = {}) {
     const content = String(text ?? '').trim();
     if (!content) throw new Error('text 不能为空');
-    if (!imageBase64 && !imageUrl) throw new Error('需要 imageBase64 或 imageUrl');
+    if (!imageBase64) throw new Error('需要 imageBase64');
 
     let comments = findCommentHost();
     if (!comments) {
@@ -231,7 +274,7 @@
     const imageButton = findImageButton(box);
     if (!imageButton) throw new Error('找不到评论图片按钮');
 
-    const file = await base64ToFile({ imageBase64, imageUrl, imageName, imageType });
+    const file = await base64ToFile({ imageBase64, imageName, imageType });
     const input = await captureFileInput(box, imageButton);
 
     // Capture the upload response when the page uses fetch (the web UI does),
@@ -256,8 +299,8 @@
       if (uploadJson && uploadJson.code !== 0) {
         throw new Error(`图片上传失败：${uploadJson.code} ${uploadJson.message || ''}`);
       }
-      if (!uploadJson && !(await waitForUpload(box, timeoutMs))) {
-        throw new Error('图片上传未完成（未检测到上传响应或图片预览）');
+      if (!(await waitForUpload(box, timeoutMs))) {
+        throw new Error('图片上传未完成（未检测到图片预览）');
       }
     } finally {
       window.fetch = originalFetch;
@@ -281,15 +324,33 @@
     }
     const rpid = responseJson?.data?.rpid_str || responseJson?.data?.rpid || null;
     const baseUrl = location.href.split('#')[0];
+    if (!rpid) {
+      const published = await waitForPublishedComment(comments, content, Math.min(timeoutMs, 15_000));
+      if (!published) {
+        throw new Error('评论提交结果未知：未捕获 /x/v2/reply/add 响应，也没在页面看到新评论；请先检查评论列表，不要直接重试');
+      }
+      return {
+        ok: true,
+        action: 'comment_browser',
+        text: content,
+        image: imageName,
+        rpid: null,
+        state: null,
+        published_unknown: true,
+        link: baseUrl,
+        result: null,
+        note: '页面已出现新评论，但没有捕获到 rpid；请用 comments 工具按内容确认。',
+      };
+    }
     return {
-      ok: Boolean(responseJson?.code === 0 || rpid),
+      ok: true,
       action: 'comment_browser',
       text: content,
       image: imageName,
-      rpid: rpid ? String(rpid) : null,
+      rpid: String(rpid),
       state: responseJson?.data?.reply?.state ?? null,
-      link: rpid ? `${baseUrl}#reply${rpid}` : baseUrl,
-      result: responseJson ? { code: responseJson.code, message: responseJson.message } : null,
+      link: `${baseUrl}#reply${rpid}`,
+      result: { code: responseJson.code, message: responseJson.message },
     };
   };
 })();

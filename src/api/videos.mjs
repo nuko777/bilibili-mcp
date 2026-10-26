@@ -93,12 +93,20 @@ export async function resolveShortVideoRef(ref, { fetchImpl = fetch, timeoutMs =
   try {
     const response = await fetchImpl(current, {
       method: 'GET',
-      redirect: 'follow',
+      redirect: 'manual',
       headers,
       signal,
     });
-    if (!isResolveHost(new URL(response.url).hostname)) return null;
-    return tryParseVideoRef(response.url);
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) return null;
+      const next = new URL(location, current);
+      if (!isResolveHost(next.hostname)) return null;
+      return tryParseVideoRef(next.toString());
+    }
+    const finalUrl = response.url || current;
+    if (!isResolveHost(new URL(finalUrl).hostname)) return null;
+    return tryParseVideoRef(finalUrl);
   } catch {
     return null;
   }

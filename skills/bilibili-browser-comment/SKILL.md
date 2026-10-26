@@ -14,7 +14,7 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
 
 - `mcp__bilibili__post_comment` 带 `image_paths` 会直接报错拒绝，**不会发布**；
 - 看到拒绝，**不要重复调用 API 发图**；
-- 改用本 skill：在已登录浏览器页面中执行独立脚本 [scripts/post-image-comment-browser.js](../../../scripts/post-image-comment-browser.js)。
+- 改用本 skill：在已登录浏览器页面中执行独立脚本 [scripts/post-image-comment-browser.js](../../scripts/post-image-comment-browser.js)。
 
 ## 前置条件
 
@@ -35,7 +35,7 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
 
 3. **在页面上下文执行脚本**
 
-   把 [scripts/post-image-comment-browser.js](../../../scripts/post-image-comment-browser.js) 的内容注入当前页面，然后调用：
+   把 [scripts/post-image-comment-browser.js](../../scripts/post-image-comment-browser.js) 的内容注入当前页面，然后调用：
 
    ```js
    await window.postBiliImageComment({
@@ -47,7 +47,6 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
    });
    ```
 
-   如果图片有可访问的 http/https 地址，也可以传 `imageUrl` 代替 `imageBase64`。
 
 4. **检查返回值**
 
@@ -63,7 +62,8 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
    }
    ```
 
-   如果 `rpid` 为空但 `ok=true`，说明页面已提交但没捕获到响应；用 `mcp__bilibili__comments` 按时间和内容确认。
+   如果返回 `ok=true`、`rpid=null`、`published_unknown=true`，说明页面已出现新评论但没捕获到响应；用 `mcp__bilibili__comments` 按时间和内容确认，**不要直接重试**。
+   如果脚本 throw“评论提交结果未知”，也先检查评论列表，确认没有发出再重试，避免重复评论。
 
 5. **回读确认**
 

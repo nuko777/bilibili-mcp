@@ -389,7 +389,7 @@ test('image comments are blocked before any API call', async () => {
       bvid: 'BV1img000001',
       message: '喵',
       imagePaths: ['C:/tmp/7.png'],
-      confirm: false,
+      confirm: true,
     }),
     (error) => error.code === -400 && /post-image-comment-browser\.js/.test(error.hint || ''),
   );
@@ -468,7 +468,8 @@ test('H5 popular enriches owner/view and advances by a full bucket', async () =>
   assert.equal(result.next_idx, 20);
   assert.equal(result.page, 2);
   assert.equal(result.items[0].owner.name, '三颗门牙X');
-  assert.equal(result.items[0].stat.view, 302000);
+  assert.deepEqual(result.items[0].stat, { view: 302000 });
+  assert.equal(result.no_more, true);
 });
 
 test('b23 short links resolve to a video reference and refuse foreign redirects', async () => {

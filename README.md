@@ -157,6 +157,19 @@ Cookie 文件位置：
 
 详细步骤见 [skills/bilibili-login/SKILL.md](skills/bilibili-login/SKILL.md)。
 
+## Skills
+
+仓库 `skills/` 下随包提供 4 个 DSH skill：
+
+| Skill | 用途 |
+| --- | --- |
+| [`bilibili-login`](skills/bilibili-login/SKILL.md) | 从已登录浏览器注入 Cookie，处理 `-101` 未登录 |
+| [`bilibili-video-digest`](skills/bilibili-video-digest/SKILL.md) | 视频、榜单、字幕、关键帧、评论与互动工作流；写操作先预览再确认 |
+| [`bilibili-browser-comment`](skills/bilibili-browser-comment/SKILL.md) | 在浏览器中发布带图评论（MCP 拒绝 API 图片评论） |
+| [`bilibili-ops`](skills/bilibili-ops/SKILL.md) | 账号自主运营手册：人设、评论风格、互动边界与每日节奏 |
+
+`bilibili-ops` 面向账号自主运营，其余三个面向用户请求；写工具都要传 `confirm: true` 才会真正执行。
+
 ## 架构与实现
 
 ```text
@@ -490,7 +503,7 @@ src/
   api/                  榜单、视频、互动、关系、收藏、消息、动态
   media/                字幕、关键帧、播放流、ffmpeg
 scripts/                Cookie 导入、只读验收、浏览器图片评论脚本
-skills/                 DSH skills
+skills/                 4 个 DSH skill（见 Skills 一节）
 test/                   离线 / MCP / live 测试
 ```
 

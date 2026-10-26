@@ -8,6 +8,8 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 
 工具命名空间：`mcp__bilibili__*`。登录态由 `bilibili-login` skill 负责，本 skill 不处理 Cookie。
 
+本 skill 面向「用户明确提出请求」的场景，写操作默认先预览、征得同意再执行。账号自主运营（见 `bilibili-ops`）中已授权的自发互动，不适用「先问用户」，但仍要传 `confirm: true` 才会真正发出。
+
 ## 1. 看懂一个视频
 
 用户给出 BV 号、av 号、完整链接或 `b23.tv` 短链时：
@@ -53,6 +55,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 
 - 先调用一次不带 `confirm` 的工具，把返回的 `action`、`target`、`details` 给用户看；
 - 用户明确同意后，再带 `confirm: true` 调用；
+- 本地调试用 `bili call <tool> '{...}'`，同样要加 `--confirm` 才真正执行；
 - `coin_video` **不可撤销**，执行前必须确认数量和余额；
 - `post_comment`、`post_dynamic`、`send_message` 是公开/对外行为，先复述文案；
 - `delete_comment` / `delete_dynamic` 只能删自己的内容，且不可撤销，必须先 dry-run 并让用户确认 rpid/动态 ID。
@@ -61,7 +64,7 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - `toview_video` 添加/移除稍后再看，可逆；`add:true/false`，默认 dry-run。
 - `send_danmaku` 发送弹幕是公开内容，先 dry-run 并让用户确认文本；`recall_danmaku` 撤回自己的弹幕（通常限发送后 2 分钟内）。
 - 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；回复评论继续用 `root`/`parent`，工具会自动生成 `回复 @父作者 : 正文`。
-- 评论带图：MCP 会直接拒绝（`image_paths` 不可用）；请按 `bilibili-browser-comment` skill 在浏览器中执行 `scripts/post-image-comment-browser.js`。动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`（仅文本）。
+- 评论带图：MCP 会拒绝（传 `image_paths` 会被拦下）；请按 `bilibili-browser-comment` skill 在浏览器中执行 `scripts/post-image-comment-browser.js`。动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`（仅文本）。
 - `post_dynamic` 传 `video` 可发布视频转发动态；传 `image_paths` 可发布图片动态。
 - `like_video`、`like_comment`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；
 - 收藏夹创建/改名/删除是写操作，必须先 dry-run；`create_favorite_folder` / `edit_favorite_folder` / `delete_favorite_folder` 分别对应。
@@ -84,7 +87,15 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 
 如果 `auth_status` 返回 `is_login: false`，转到 `bilibili-login` skill，不要尝试在 MCP 内提取登录态。
 
-## 5. 失败处理
+## 5. 其它读取
+
+- 搜索：`mcp__bilibili__search`（`keyword`、`type: video/user`、`order`、`page`、`min_play`）；
+- 观看历史：`mcp__bilibili__history`；稍后再看：`mcp__bilibili__toview`（写入用 `toview_video`）；
+- 入站必刷：`mcp__bilibili__precious_list`；
+- 某个 UP 的投稿：`mcp__bilibili__user_videos`（`mid`、`order`）；
+- 粉丝列表：`mcp__bilibili__list_followers`（传 `mid` 可查他人）。
+
+## 6. 失败处理
 
 - `-101`：登录态失效 → `bilibili-login`；
 - `-352`：风控 → 降低频率，等待几分钟；

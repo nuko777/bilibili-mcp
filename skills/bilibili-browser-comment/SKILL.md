@@ -16,6 +16,8 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
 - 看到拒绝，**不要重复调用 API 发图**；
 - 改用本 skill：在已登录浏览器页面中执行独立脚本 [scripts/post-image-comment-browser.js](../../scripts/post-image-comment-browser.js)。
 
+本 skill 默认由用户请求触发；自主运营（`bilibili-ops`）里自行决定的带图评论不受「先问用户」限制，但文案和图片仍要先自检。
+
 ## 前置条件
 
 - agent browser 已打开并登录 B站；
@@ -31,11 +33,11 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
 
 2. **读取图片**
 
-   把本地图片读成 base64（不需要保留 `data:image/...;base64,` 前缀也可以）。建议单张小于 10MB。
+   把本地图片读成 base64（不需要保留 `data:image/...;base64,` 前缀也可以）。单张建议小于 10MB——10MB/25MB 是 MCP `post_dynamic` 图片路径的限制，浏览器脚本本身不校验；图太大时容易卡在上传。
 
 3. **在页面上下文执行脚本**
 
-   把 [scripts/post-image-comment-browser.js](../../scripts/post-image-comment-browser.js) 的内容注入当前页面，然后调用：
+   用 `evaluate_script` 注入脚本文件：`format` 传 `script`，`sourcePath` 指向 [scripts/post-image-comment-browser.js](../../scripts/post-image-comment-browser.js)。注入成功后 `window.postBiliImageComment` 就绪，再调一次 `evaluate_script`：
 
    ```js
    await window.postBiliImageComment({

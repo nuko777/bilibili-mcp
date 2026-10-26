@@ -17,7 +17,7 @@ MCP server 不连接浏览器、不读 Cookie 数据库、不做扫码登录；�
   - `chrome-devtools` MCP 工具（`list_network_requests` / `get_network_request`）；
   - `agent-browser`（能导出 Cookie 到本地文件）；
   - 用户自己从浏览器开发者工具复制 Cookie。
-- 命令都在 `bilibili-mcp` 仓库根目录执行。
+- 命令都在 `bilibili-mcp` 仓库根目录执行；用 npx 安装时没有这个目录，改用 `BILI_COOKIE` 环境变量，或先 clone 仓库再执行。
 
 ## 步骤
 

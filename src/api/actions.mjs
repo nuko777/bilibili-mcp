@@ -787,12 +787,14 @@ export async function postDynamic(client, { text, imagePaths = [], video, confir
   };
 }
 
-async function dynamicTarget(client, dynamicId) {
+async function dynamicTarget(client, dynamicId, { cacheTtl = 5 * 60_000 } = {}) {
   try {
-    const item = await getDynamicDetail(client, dynamicId);
+    const item = await getDynamicDetail(client, dynamicId, { cacheTtl });
     const dynamic = normalizeDynamic(item);
     return {
       detail: true,
+      item,
+      dynamic,
       target: {
         dynamic_id: String(dynamicId),
         url: dynamic?.url || `https://t.bilibili.com/${dynamicId}`,
@@ -811,6 +813,8 @@ async function dynamicTarget(client, dynamicId) {
     if (!detailIndexMiss) throw error;
     return {
       detail: false,
+      item: null,
+      dynamic: null,
       target: {
         dynamic_id: String(dynamicId),
         url: `https://t.bilibili.com/${dynamicId}`,
@@ -819,6 +823,60 @@ async function dynamicTarget(client, dynamicId) {
       },
     };
   }
+}
+
+export async function likeDynamic(client, { dynamicId, like = true, confirm = false } = {}) {
+  client.requireLogin();
+  if (!dynamicId) throw new BiliError('需要提供 dynamic_id', { code: -400 });
+  // Unlike video likes, the dynamic detail carries the current `like.status`;
+  // always read it fresh so preview/no-op decisions do not use a stale cache.
+  const resolved = await dynamicTarget(client, dynamicId, { cacheTtl: 0 });
+  const target = resolved.target;
+  const desired = Boolean(like);
+  const rawStatus = resolved.item?.modules?.module_stat?.like?.status;
+  const current = typeof rawStatus === 'boolean' ? rawStatus : null;
+  const details = {
+    dynamic_id: String(dynamicId),
+    current_liked: current,
+    desired_liked: desired,
+  };
+  if (!confirm) {
+    return preview(desired ? 'like_dynamic' : 'unlike_dynamic', target, details);
+  }
+  if (current === desired) {
+    client.clearCache?.();
+    return {
+      ok: true,
+      changed: false,
+      action: desired ? 'like_dynamic' : 'unlike_dynamic',
+      target,
+      dynamic_id: String(dynamicId),
+      liked: desired,
+      hint: '动态已经处于目标状态，未发送请求。',
+    };
+  }
+  client.requireCsrf();
+  // Captured from the opus page:
+  // POST /x/dynamic/feed/dyn/thumb?csrf=... with JSON { dyn_id_str, up, spmid }.
+  const result = await client.postJson(
+    `https://api.bilibili.com/x/dynamic/feed/dyn/thumb?csrf=${encodeURIComponent(client.csrf)}`,
+    {
+      dyn_id_str: String(dynamicId),
+      up: desired ? 1 : 2,
+      spmid: '333.1369.0.0',
+    },
+    { retry: 0, referer: `https://www.bilibili.com/opus/${dynamicId}` },
+  );
+  client.clearCache?.();
+  return {
+    ok: result.code === 0,
+    changed: result.code === 0,
+    action: desired ? 'like_dynamic' : 'unlike_dynamic',
+    target,
+    dynamic_id: String(dynamicId),
+    liked: desired,
+    result: { code: result.code, message: result.message },
+  };
 }
 
 export async function topDynamic(client, { dynamicId, top = true, confirm = false } = {}) {

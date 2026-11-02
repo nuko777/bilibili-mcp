@@ -8,7 +8,7 @@
 
 - Node.js >= 20.10（推荐 24），**零运行时依赖**
 - stdio JSON-RPC 2.0，可直接接入 DSH、Claude Desktop、其他 MCP 客户端
-- 25 个只读工具 + 18 个写工具
+- 25 个只读工具 + 19 个写工具
 - 支持排行榜、热门、每周必看、视频信息/字幕/关键帧/九宫格/弹幕、评论、搜索、用户、关注、收藏夹管理、通知、私信、动态流
 - 写操作默认 dry-run，只有 `confirm=true` 才执行
 - 登录态由外部 skill/脚本注入，MCP 本身不读取浏览器、不解密 Cookie 数据库
@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 35 个离线测试，不需要登录
+npm test          # 36 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -180,7 +180,7 @@ src/server.mjs
   ├─ initialize / tools/list / tools/call / ping
   ├─ Cookie 文件 mtime 检查与热重载
   ├─ 工具参数校验
-  └─ src/tools/index.mjs（43 个工具）
+  └─ src/tools/index.mjs（44 个工具）
         ├─ src/api/*      业务 API 与字段归一化
         ├─ src/core/*     HTTP、WBI、Cookie、配置、错误
         └─ src/media/*    字幕、关键帧、播放流、ffmpeg
@@ -215,7 +215,7 @@ src/server.mjs
 | 视频互动状态 | `/x/web-interface/archive/relation`（点赞/投币/收藏预览） |
 | 点赞/投币/收藏 | `/x/web-interface/archive/like`、`coin/add`、`/x/v3/fav/resource/deal` |
 | 收藏夹管理 | `/x/v3/fav/folder/add`、`edit`、`del` |
-| 动态 | `/x/polymer/web-dynamic/v1/feed/all`、`feed/space`、`detail`、`/x/dynamic/feed/create/dyn` |
+| 动态 | `/x/polymer/web-dynamic/v1/feed/all`、`feed/space`、`detail`、`/x/dynamic/feed/create/dyn`；点赞 `/x/dynamic/feed/dyn/thumb` |
 | 弹幕 | 读取 `/x/v2/dm/web/view` + `/x/v2/dm/wbi/web/seg.so`（protobuf）；发送 `/x/v2/dm/post` |
 | 私信 | `/svr_sync/v1/svr_sync/fetch_session_msgs`、`/web_im/v1/web_im/send_msg` |
 | 关注/粉丝 | 读取 `/x/relation/followings`、`/x/relation/fans`；写入 `/x/relation/modify` |
@@ -254,12 +254,13 @@ src/server.mjs
 | 消息 | `notifications`、`messages` |
 | 动态/历史 | `dynamic_feed`、`dynamic_detail`、`user_dynamics`（指定用户/自己）、`history`、`toview` |
 
-### 写入（18）
+### 写入（19）
 
 | 工具 | 说明 |
 |---|---|
 | `like_video` | 视频点赞/取消点赞 |
 | `like_comment` | 评论点赞/取消点赞 |
+| `like_dynamic` | 动态点赞/取消点赞 |
 | `coin_video` | 投币 1–2 枚，可选同时点赞；**不可撤销** |
 | `favorite_video` | 收藏/取消收藏；支持 `folder_id` 单夹或 `folder_ids` 多夹 |
 | `create_favorite_folder` | 创建收藏夹 |
@@ -296,6 +297,7 @@ mcp__bilibili__user_dynamics {"mid": "401742377"}
 mcp__bilibili__user_dynamics {}
 mcp__bilibili__video_frames {"video": "BV1dan166EHf", "type": "grid", "count": 9, "frame_height": 720}
 mcp__bilibili__favorite_video {"video": "BV1dan166EHf", "folder_ids": ["4267463668", "4367445368"], "confirm": false}
+mcp__bilibili__like_dynamic {"dynamic_id": "1261344079956934665", "like": true, "confirm": false}
 mcp__bilibili__post_dynamic {"text": "分享视频", "video": "BV1w2Hw6KE1j", "confirm": false}
 mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "测试", "mention_user_ids": ["3747573468761409"], "confirm": false}
 ```
@@ -323,7 +325,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 35 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 36 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -413,6 +415,12 @@ Cookie 等价于账号密码。
 
 ## Changelog
 
+### 未发布
+
+- `notifications` / `messages` 归为只读工具，与 README 的读取分类一致
+- 新增 `like_dynamic`：动态点赞/取消点赞，默认 dry-run；`dynamic_detail` 增加 `stat.liked`
+- `like_dynamic` 的请求按浏览器实际抓包实现：`POST /x/dynamic/feed/dyn/thumb?csrf=...`，JSON 体为 `{dyn_id_str, up, spmid}`
+
 ### 0.1.0-beta.5 — 2026-10-27
 
 - 新增 `bilibili-ops` 账号运营 skill；统一 `bilibili-login` / `bilibili-video-digest` / `bilibili-browser-comment` 的职责边界，README 增加 Skills 一览
@@ -499,7 +507,7 @@ Cookie 等价于账号密码。
 src/
   server.mjs            stdio MCP 入口
   mcp/protocol.mjs      JSON-RPC 结果/工具描述
-  tools/index.mjs       43 个工具 schema + 参数校验
+  tools/index.mjs       44 个工具 schema + 参数校验
   core/                 HTTP、WBI、Cookie、配置、错误、格式化
   api/                  榜单、视频、互动、关系、收藏、消息、动态
   media/                字幕、关键帧、播放流、ffmpeg

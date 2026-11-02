@@ -16,6 +16,7 @@ import {
   deleteFavoriteFolder,
   editFavoriteFolder,
   favoriteVideo,
+  likeDynamic,
   postComment,
   postDynamic,
   recallDanmaku,
@@ -130,7 +131,11 @@ test('dynamic normalization extracts author, video card and stats', () => {
           },
         },
       },
-      module_stat: { like: { count: 268 }, comment: { count: 6 }, forward: { count: 1 } },
+      module_stat: {
+        like: { count: 268, status: false },
+        comment: { count: 6 },
+        forward: { count: 1 },
+      },
     },
   });
   assert.equal(dynamic.id, '1261291569711939586');
@@ -138,7 +143,79 @@ test('dynamic normalization extracts author, video card and stats', () => {
   assert.equal(dynamic.video.bvid, 'BV1Ndnw6KEAq');
   assert.equal(dynamic.video.play, 1632);
   assert.equal(dynamic.stat.like, 268);
+  assert.equal(dynamic.stat.liked, false);
   assert.equal(dynamic.url, 'https://t.bilibili.com/1261291569711939586');
+});
+
+test('like_dynamic previews and sends the captured opus thumb request', async () => {
+  const calls = [];
+  let liked = false;
+  const item = () => ({
+    id_str: '1266049845884354566',
+    type: 'DYNAMIC_TYPE_DRAW',
+    modules: {
+      module_author: { mid: 2, name: 'UP' },
+      module_dynamic: { desc: { text: '动态正文' } },
+      module_stat: {
+        like: { count: 2442, status: liked },
+        comment: { count: 28 },
+        forward: { count: 20 },
+      },
+    },
+  });
+  const fake = {
+    csrf: 'csrf-token',
+    requireLogin() {},
+    requireCsrf() {},
+    clearCache() {},
+    get: async (url, params, options) => {
+      assert.match(url, /\/x\/polymer\/web-dynamic\/v1\/detail$/);
+      calls.push({ kind: 'get', options });
+      return { code: 0, data: { item: item() } };
+    },
+    postJson: async (url, body, options) => {
+      calls.push({ kind: 'post', url, body, options });
+      return { code: 0, message: 'OK', ttl: 1, data: {} };
+    },
+  };
+
+  const preview = await likeDynamic(fake, { dynamicId: '1266049845884354566' });
+  assert.equal(preview.dry_run, true);
+  assert.equal(preview.action, 'like_dynamic');
+  assert.equal(preview.details.current_liked, false);
+  assert.equal(calls.filter((call) => call.kind === 'post').length, 0);
+
+  liked = false;
+  const result = await likeDynamic(fake, { dynamicId: '1266049845884354566', confirm: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  assert.equal(result.liked, true);
+  const post = calls.find((call) => call.kind === 'post');
+  assert.match(post.url, /\/x\/dynamic\/feed\/dyn\/thumb\?csrf=csrf-token$/);
+  assert.deepEqual(post.body, {
+    dyn_id_str: '1266049845884354566',
+    up: 1,
+    spmid: '333.1369.0.0',
+  });
+  assert.equal(post.options.retry, 0);
+  assert.equal(post.options.referer, 'https://www.bilibili.com/opus/1266049845884354566');
+  assert.equal(calls.filter((call) => call.kind === 'get').at(-1).options.cacheTtl, 0);
+
+  calls.length = 0;
+  liked = true;
+  const noop = await likeDynamic(fake, { dynamicId: '1266049845884354566', confirm: true });
+  assert.equal(noop.changed, false);
+  assert.equal(calls.filter((call) => call.kind === 'post').length, 0);
+
+  calls.length = 0;
+  liked = true;
+  const unlike = await likeDynamic(fake, {
+    dynamicId: '1266049845884354566',
+    like: false,
+    confirm: true,
+  });
+  assert.equal(unlike.action, 'unlike_dynamic');
+  assert.equal(calls.find((call) => call.kind === 'post').body.up, 2);
 });
 
 test('stream selection prefers AVC and respects max height', () => {

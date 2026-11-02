@@ -75,7 +75,7 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
   assert.ok(init.result.instructions.includes('bilibili-login'));
 
   const list = await client.send('tools/list', {});
-  assert.equal(list.result.tools.length, 43);
+  assert.equal(list.result.tools.length, 44);
   const names = new Set(list.result.tools.map((tool) => tool.name));
   for (const expected of [
     'auth_status',
@@ -92,6 +92,7 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
     'delete_comment',
     'delete_dynamic',
     'like_comment',
+    'like_dynamic',
     'top_dynamic',
     'update_profile',
     'post_dynamic',
@@ -103,6 +104,18 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
   ]) {
     assert.ok(names.has(expected), `missing tool ${expected}`);
   }
+  const notifications = list.result.tools.find((tool) => tool.name === 'notifications');
+  const messages = list.result.tools.find((tool) => tool.name === 'messages');
+  assert.equal(notifications.annotations.readOnlyHint, true);
+  assert.equal(messages.annotations.readOnlyHint, true);
+
+  const readLine = init.result.instructions.split('\n').find((line) => line.startsWith('读取类：'));
+  const writeLine = init.result.instructions.split('\n').find((line) => line.startsWith('写入类：'));
+  assert.match(readLine, /notifications/);
+  assert.match(readLine, /messages/);
+  assert.doesNotMatch(writeLine, /notifications/);
+  assert.doesNotMatch(writeLine, /messages/);
+
   const frames = list.result.tools.find((tool) => tool.name === 'video_frames');
   assert.equal(frames.inputSchema.required[0], 'video');
   assert.equal(frames.inputSchema.properties.video.type, 'string');
@@ -113,6 +126,9 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
   const likeTool = list.result.tools.find((tool) => tool.name === 'like_video');
   assert.equal(likeTool.annotations.destructiveHint, false);
   assert.equal(likeTool.annotations.idempotentHint, true);
+  const likeDynamicTool = list.result.tools.find((tool) => tool.name === 'like_dynamic');
+  assert.equal(likeDynamicTool.annotations.destructiveHint, false);
+  assert.equal(likeDynamicTool.annotations.idempotentHint, true);
 
   const unknown = await client.send('tools/call', { name: 'nope', arguments: {} });
   assert.equal(unknown.result.isError, true);

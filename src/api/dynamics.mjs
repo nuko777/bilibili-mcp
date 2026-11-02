@@ -20,6 +20,7 @@ function normalizeStat(stat) {
     forward: stat.forward?.count ?? 0,
     comment: stat.comment?.count ?? 0,
     like: stat.like?.count ?? 0,
+    liked: typeof stat.like?.status === 'boolean' ? stat.like.status : null,
   };
 }
 
@@ -101,12 +102,12 @@ export function normalizeDynamic(item) {
   };
 }
 
-export async function getDynamicDetail(client, dynamicId) {
+export async function getDynamicDetail(client, dynamicId, { cacheTtl = 5 * 60_000 } = {}) {
   if (!dynamicId) throw new BiliError('需要动态 ID', { code: -400 });
   const json = await client.get(
     'https://api.bilibili.com/x/polymer/web-dynamic/v1/detail',
     { id: String(dynamicId), features: 'itemOpusStyle' },
-    { cacheTtl: 5 * 60_000 },
+    { cacheTtl },
   );
   const item = json.data?.item;
   if (!item) {

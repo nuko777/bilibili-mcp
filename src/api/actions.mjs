@@ -432,6 +432,27 @@ export async function replyAuthorName(client, { oid, type, root, parent }) {
   return '';
 }
 
+function normalizeMentionIds(mentionUserIds) {
+  const list = Array.isArray(mentionUserIds) ? mentionUserIds : mentionUserIds ? [mentionUserIds] : [];
+  return [...new Set(list.map((mid) => String(mid).trim()).filter(Boolean))];
+}
+
+async function resolveMentionUsers(client, mentionIds) {
+  const mentions = [];
+  for (const mid of mentionIds) {
+    const user = await userInfo(client, { mid });
+    const name = String(user.name || '').trim();
+    if (!name) {
+      throw new BiliError(`无法解析被 @ 的用户：${mid}`, {
+        code: -400,
+        hint: '用户不存在、不可见，或昵称为空；请检查 mention_user_ids。',
+      });
+    }
+    mentions.push({ mid: String(user.mid || mid), name });
+  }
+  return mentions;
+}
+
 export async function postComment(
   client,
   { bvid, aid, message, root, parent, dynamicId, imagePaths = [], mentionUserIds = [], syncToDynamic = false, confirm = false } = {},
@@ -447,7 +468,7 @@ export async function postComment(
       hint: IMAGE_COMMENT_BLOCKED_HINT,
     });
   }
-  const mentionIds = [...new Set((Array.isArray(mentionUserIds) ? mentionUserIds : mentionUserIds ? [mentionUserIds] : []).map(String).filter(Boolean))];
+  const mentionIds = normalizeMentionIds(mentionUserIds);
   if (mentionIds.length > 10) throw new BiliError('单次最多 @ 10 个用户', { code: -400 });
   if (parent && !root) {
     throw new BiliError('提供 parent 时必须同时提供 root', { code: -400, hint: '回复二级评论需要根评论 rpid。' });
@@ -457,13 +478,14 @@ export async function postComment(
   const target = resolved.target;
   const oid = resolved.oid;
   const type = resolved.type;
+  const isNestedReply = Boolean(root && parent && String(parent) !== String(root));
   const details = {
     oid,
     type,
     comment_oid: oid,
     comment_type: type,
     message: text,
-    reply_to: root ? String(parent || root) : undefined,
+    reply_to: isNestedReply ? String(parent) : undefined,
     mention_user_ids: mentionIds.length ? mentionIds : undefined,
     root: root ? String(root) : undefined,
     parent: parent ? String(parent) : undefined,
@@ -472,11 +494,7 @@ export async function postComment(
   };
   if (!confirm) return preview('comment', target, details, '评论是公开内容。确认文案后再设 confirm=true。');
   client.requireCsrf();
-  const mentions = [];
-  for (const mid of mentionIds) {
-    const user = await userInfo(client, { mid });
-    mentions.push({ mid: String(user.mid || mid), name: user.name });
-  }
+  const mentions = await resolveMentionUsers(client, mentionIds);
   const atNameToMid = {};
   const mentionPrefix = mentions
     .filter((mention) => mention.name)
@@ -488,12 +506,15 @@ export async function postComment(
   }
   let replyTo = null;
   let finalMessage = `${mentionPrefix}${text}`;
-  if (root) {
+  // Direct replies to the root comment keep the user's text unchanged. Only
+  // replies to a nested comment get the "回复 @父作者 : " prefix that the web
+  // UI sends (captured from /x/v2/reply/add).
+  if (isNestedReply) {
     replyTo = await replyAuthorName(client, {
       oid,
       type,
       root,
-      parent: parent || root,
+      parent,
     });
     if (!replyTo) {
       throw new BiliError('无法解析被回复评论的作者', {
@@ -683,17 +704,53 @@ export async function deleteComment(
   };
 }
 
-export async function postDynamic(client, { text, imagePaths = [], video, confirm = false } = {}) {
+function buildDynamicContents(text, mentions = []) {
+  const contents = [];
+  let remaining = String(text || '');
+  const pending = [];
+  for (const mention of mentions) {
+    const token = `@${mention.name}`;
+    const index = remaining.indexOf(token);
+    if (index !== -1) {
+      const before = remaining.slice(0, index);
+      if (before) contents.push({ raw_text: before, type: 1, biz_id: '' });
+      contents.push({ raw_text: token, type: 2, biz_id: String(mention.mid) });
+      remaining = remaining.slice(index + token.length);
+    } else {
+      pending.push(mention);
+    }
+  }
+  if (remaining) contents.push({ raw_text: remaining, type: 1, biz_id: '' });
+  if (pending.length) {
+    if (contents.length) {
+      const last = contents[contents.length - 1];
+      if (last.type === 1) {
+        if (!last.raw_text.endsWith(' ')) last.raw_text = `${last.raw_text} `;
+      } else {
+        contents.push({ raw_text: ' ', type: 1, biz_id: '' });
+      }
+    }
+    for (const mention of pending) {
+      contents.push({ raw_text: `@${mention.name}`, type: 2, biz_id: String(mention.mid) });
+      contents.push({ raw_text: ' ', type: 1, biz_id: '' });
+    }
+  }
+  return contents;
+}
+
+export async function postDynamic(client, { text, imagePaths = [], video, mentionUserIds = [], confirm = false } = {}) {
   client.requireLogin();
   const content = String(text ?? '').trim();
   const paths = Array.isArray(imagePaths) ? imagePaths.filter(Boolean) : imagePaths ? [imagePaths] : [];
+  const mentionIds = normalizeMentionIds(mentionUserIds);
   if (content.length > 2000) throw new BiliError('动态文本过长（最多 2000 字）', { code: -400 });
   if (paths.length > 9) throw new BiliError('动态图片最多 9 张', { code: -400 });
+  if (mentionIds.length > 10) throw new BiliError('单次最多 @ 10 个用户', { code: -400 });
   if (video && paths.length) {
     throw new BiliError('视频转发动态不能同时附带本地图片', { code: -400 });
   }
-  if (!content && !paths.length && !video) {
-    throw new BiliError('动态内容不能为空（文本、图片或视频至少一项）', { code: -400 });
+  if (!content && !paths.length && !video && !mentionIds.length) {
+    throw new BiliError('动态内容不能为空（文本、图片、视频或 @ 至少一项）', { code: -400 });
   }
 
   const view = video ? await getView(client, video) : null;
@@ -707,12 +764,14 @@ export async function postDynamic(client, { text, imagePaths = [], video, confir
           url: `https://www.bilibili.com/video/${view.bvid}`,
         },
         scene: 5,
+        mention_user_ids: mentionIds.length ? mentionIds : undefined,
         warning: '会以当前账号身份发布一条视频转发动态。',
       }
     : {
         text: content,
         images: paths,
         scene: paths.length ? 2 : 1,
+        mention_user_ids: mentionIds.length ? mentionIds : undefined,
         warning: '动态会公开发布，且会以当前账号身份出现。',
       };
   if (!confirm) {
@@ -731,6 +790,12 @@ export async function postDynamic(client, { text, imagePaths = [], video, confir
     );
   }
   client.requireCsrf();
+  const mentions = await resolveMentionUsers(client, mentionIds);
+  const contents = buildDynamicContents(content || (video ? '分享视频' : ''), mentions);
+  const totalTextLength = contents.reduce((total, item) => total + String(item.raw_text || '').length, 0);
+  if (totalTextLength > 2000) {
+    throw new BiliError('动态文本过长（含 @ 昵称后最多 2000 字）', { code: -400 });
+  }
   await assertImageBatch(paths);
 
   const pics = [];
@@ -739,11 +804,7 @@ export async function postDynamic(client, { text, imagePaths = [], video, confir
   }
   const uploadId = `${client.uid}_${Math.floor(Date.now() / 1000)}_${crypto.randomInt(1000, 9999)}`;
   const dynReq = {
-    content: {
-      contents: content || video
-        ? [{ raw_text: content || '分享视频', type: 1, biz_id: '' }]
-        : [],
-    },
+    content: { contents },
     meta: { app_meta: { from: 'create.dynamic.web', mobi_app: 'web' } },
     scene: video ? 5 : paths.length ? 2 : 1,
     upload_id: uploadId,
@@ -761,7 +822,9 @@ export async function postDynamic(client, { text, imagePaths = [], video, confir
   const result = await client.postJson(
     `https://api.bilibili.com/x/dynamic/feed/create/dyn?csrf=${encodeURIComponent(client.csrf)}`,
     body,
-    { retry: 0, referer: video ? 'https://t.bilibili.com/' : undefined },
+    // The web composer posts from t.bilibili.com; use it for text and image
+    // posts too so the Referer/Origin match the captured browser request.
+    { retry: 0, referer: 'https://t.bilibili.com/' },
   );
   const dynamicId = result.data?.dyn_id_str || result.data?.dyn_id || result.data?.dynamic_id_str || null;
   client.clearCache?.();
@@ -779,6 +842,7 @@ export async function postDynamic(client, { text, imagePaths = [], video, confir
       : undefined,
     dynamic_id: dynamicId ? String(dynamicId) : null,
     url: dynamicId ? `https://t.bilibili.com/${dynamicId}` : 'https://t.bilibili.com/',
+    mentions: mentions.length ? mentions : undefined,
     result: {
       code: result.code,
       message: result.message,

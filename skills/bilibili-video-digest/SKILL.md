@@ -63,9 +63,9 @@ whenToUse: 当用户要求“看/总结某个 B 站视频”“整理热榜/每�
 - `update_profile` 修改昵称/签名；昵称消耗 6 硬币，必须先 dry-run 并让用户确认。
 - `toview_video` 添加/移除稍后再看，可逆；`add:true/false`，默认 dry-run。
 - `send_danmaku` 发送弹幕是公开内容，先 dry-run 并让用户确认文本；`recall_danmaku` 撤回自己的弹幕（通常限发送后 2 分钟内）。
-- 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；回复评论继续用 `root`/`parent`，工具会自动生成 `回复 @父作者 : 正文`。
+- 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`；直接回复顶层评论传 `root=parent=顶层 rpid`，正文保持原样；回复楼中楼传 `root=顶层 rpid`、`parent=目标 rpid`，工具会自动生成 `回复 @父作者 : 正文`。
 - 评论带图：MCP 会拒绝（传 `image_paths` 会被拦下）；请按 `bilibili-browser-comment` skill 在浏览器中执行 `scripts/post-image-comment-browser.js`。动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`（仅文本）。
-- `post_dynamic` 传 `video` 可发布视频转发动态；传 `image_paths` 可发布图片动态。
+- `post_dynamic` 传 `video` 可发布视频转发动态；传 `image_paths` 可发布图片动态；传 `mention_user_ids` 可显式 @ 用户（最多 10 个，正文里已有 `@昵称` 时会就地转成 AT 组件，否则追加在末尾）。
 - `like_video`、`like_dynamic`、`like_comment`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；`like_dynamic` 的 `dynamic_id` 必填，`like:true/false` 控制点赞/取消；
 - 收藏夹创建/改名/删除是写操作，必须先 dry-run；`create_favorite_folder` / `edit_favorite_folder` / `delete_favorite_folder` 分别对应。
 - 收藏单个夹传 `folder_id`，多个夹传 `folder_ids`；不知道 folder id 时先调 `list_favorites` 不带 folder_id。

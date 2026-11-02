@@ -667,7 +667,7 @@ export const tools = [
     name: 'post_comment',
     title: '发表评论 / 回复',
     description:
-      '在视频或动态下发表评论（仅文本）；提供 root/parent 可回复某条评论。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。带图评论会被拒绝，请按 bilibili-browser-comment skill 在已登录浏览器中执行 scripts/post-image-comment-browser.js。',
+      '在视频或动态下发表评论（仅文本）；提供 root/parent 可回复某条评论。只有 parent 与 root 不同（真正的楼中楼）才自动生成 回复 @父作者 : 前缀；直接回复顶层评论保持原文。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。带图评论会被拒绝，请按 bilibili-browser-comment skill 在已登录浏览器中执行 scripts/post-image-comment-browser.js。',
     annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,
@@ -763,7 +763,7 @@ export const tools = [
     name: 'post_dynamic',
     title: '发布动态',
     description:
-      '发布动态：文本、可选本地图片（最多 9 张），或传 video 转发一条视频卡片动态（scene=5）。默认只预览；confirm=true 才发布。动态是公开内容。',
+      '发布动态：文本、可选本地图片（最多 9 张）、@ 用户（最多 10 个），或传 video 转发一条视频卡片动态（scene=5）。默认只预览；confirm=true 才发布。动态是公开内容。',
     annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       text: str('动态正文，最多 2000 字', { maxLength: 2000 }),
@@ -772,6 +772,10 @@ export const tools = [
         items: { type: 'string' },
         maxItems: 9,
       }),
+      mention_user_ids: arr('要显式 @ 的用户 UID 数组，最多 10 个', {
+        items: { type: 'string' },
+        maxItems: 10,
+      }),
       confirm: bool('必须为 true 才发布', { default: false }),
     }),
     handler: async (args, ctx) =>
@@ -779,6 +783,7 @@ export const tools = [
         text: args.text,
         video: args.video,
         imagePaths: args.image_paths || [],
+        mentionUserIds: args.mention_user_ids || [],
         confirm: args.confirm === true,
       }),
   },

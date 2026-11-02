@@ -29,6 +29,59 @@ import { decodeDanmakuSeg, decodeDanmakuView } from '../src/api/danmaku.mjs';
 
 const IMG = '7cd084941338484aae1ad9425b84077c';
 const SUB = '4932caff0ff746eab6f01bf08b70ac45';
+const REPLY_DYNAMIC_ID = '1266139101724147736';
+const REPLY_ROOT_RPID = '319015268737';
+const REPLY_NESTED_RPID = '322744833472';
+
+function commentReplyFake() {
+  const calls = { posts: [], detail: 0, threads: 0 };
+  const fake = {
+    csrf: 'csrf-token',
+    requireLogin() {},
+    requireCsrf() {},
+    clearCache() {},
+    get: async (url) => {
+      if (url.endsWith('/x/polymer/web-dynamic/v1/detail')) {
+        calls.detail += 1;
+        return {
+          code: 0,
+          data: {
+            item: {
+              id_str: REPLY_DYNAMIC_ID,
+              type: 'DYNAMIC_TYPE_DRAW',
+              basic: { comment_type: 11, comment_id_str: '414222524' },
+              modules: {
+                module_author: { mid: 12539868, name: '薇薇安是对的' },
+                module_dynamic: { desc: { text: '动态正文' }, major: {} },
+                module_stat: {
+                  like: { count: 0, status: false },
+                  comment: { count: 0 },
+                  forward: { count: 0 },
+                },
+              },
+            },
+          },
+        };
+      }
+      if (url.endsWith('/x/v2/reply/reply')) {
+        calls.threads += 1;
+        return {
+          data: {
+            root: { member: { uname: '薇薇安是对的' } },
+            replies: [{ rpid_str: REPLY_NESTED_RPID, member: { uname: '汐儿不是鱼' } }],
+            page: { count: 1 },
+          },
+        };
+      }
+      throw new Error(`unexpected endpoint: ${url}`);
+    },
+    postForm: async (url, form) => {
+      calls.posts.push({ url, form });
+      return { code: 0, message: 'OK', data: {} };
+    },
+  };
+  return { fake, calls };
+}
 
 test('WBI mixin key and signature match a fixed vector', () => {
   const mixin = getMixinKey(IMG, SUB);
@@ -789,6 +842,122 @@ test('post_dynamic video share sends scene 5 and web_repost_src', async () => {
   assert.equal(calls[0].body.dyn_req.scene, 5);
   assert.deepEqual(calls[0].body.web_repost_src.revs_id, { dyn_type: 8, rid: 123 });
   assert.equal(calls[0].body.dyn_req.content.contents[0].raw_text, 'share text');
+});
+
+test('post_dynamic appends mentions and preserves inline @ text', async () => {
+  const calls = [];
+  const fake = {
+    uid: '42',
+    csrf: 'csrf-token',
+    requireLogin() {},
+    requireCsrf() {},
+    clearCache() {},
+    getSigned: async (_url, params) => {
+      calls.push({ kind: 'user', mid: String(params.mid) });
+      return { data: { mid: Number(params.mid), name: '汐儿不是鱼' } };
+    },
+    get: async () => {
+      throw new Error('optional relation endpoint unavailable');
+    },
+    postJson: async (url, body, options) => {
+      calls.push({ kind: 'post', url, body, options });
+      return { code: 0, message: 'OK', data: { dyn_id_str: '999', dyn_type: 2 } };
+    },
+  };
+
+  const appended = await postDynamic(fake, {
+    text: '测试动态',
+    mentionUserIds: ['3747573468761409'],
+    confirm: true,
+  });
+  const firstPost = calls.find((call) => call.kind === 'post');
+  assert.deepEqual(firstPost.body.dyn_req.content.contents, [
+    { raw_text: '测试动态 ', type: 1, biz_id: '' },
+    { raw_text: '@汐儿不是鱼', type: 2, biz_id: '3747573468761409' },
+    { raw_text: ' ', type: 1, biz_id: '' },
+  ]);
+  assert.equal(firstPost.options.referer, 'https://t.bilibili.com/');
+  assert.deepEqual(appended.mentions, [{ mid: '3747573468761409', name: '汐儿不是鱼' }]);
+
+  calls.length = 0;
+  await postDynamic(fake, {
+    text: 'hi @汐儿不是鱼 there',
+    mentionUserIds: ['3747573468761409'],
+    confirm: true,
+  });
+  const inlinePost = calls.find((call) => call.kind === 'post');
+  assert.deepEqual(inlinePost.body.dyn_req.content.contents, [
+    { raw_text: 'hi ', type: 1, biz_id: '' },
+    { raw_text: '@汐儿不是鱼', type: 2, biz_id: '3747573468761409' },
+    { raw_text: ' there', type: 1, biz_id: '' },
+  ]);
+});
+
+test('post_dynamic mention dry-run does not resolve users and caps at 10', async () => {
+  let networkCalls = 0;
+  const fake = {
+    uid: '42',
+    requireLogin() {},
+    getSigned: async () => {
+      networkCalls += 1;
+      throw new Error('should not resolve users during dry-run');
+    },
+    postJson: async () => {
+      networkCalls += 1;
+      throw new Error('should not post during dry-run');
+    },
+  };
+  const preview = await postDynamic(fake, {
+    text: '测试动态',
+    mentionUserIds: ['3747573468761409'],
+  });
+  assert.equal(preview.dry_run, true);
+  assert.deepEqual(preview.details.mention_user_ids, ['3747573468761409']);
+  assert.equal(networkCalls, 0);
+
+  await assert.rejects(
+    postDynamic(fake, {
+      text: 'too many',
+      mentionUserIds: Array.from({ length: 11 }, (_, index) => String(100 + index)),
+    }),
+    /最多 @ 10 个用户/,
+  );
+});
+
+test('post_comment top-level reply keeps user text unchanged', async () => {
+  const { fake, calls } = commentReplyFake();
+  const result = await postComment(fake, {
+    dynamicId: REPLY_DYNAMIC_ID,
+    message: '顶层原文',
+    root: REPLY_ROOT_RPID,
+    parent: REPLY_ROOT_RPID,
+    confirm: true,
+  });
+  assert.equal(calls.posts.length, 1);
+  assert.equal(calls.threads, 0);
+  assert.equal(calls.posts[0].form.message, '顶层原文');
+  assert.equal(calls.posts[0].form.root, REPLY_ROOT_RPID);
+  assert.equal(calls.posts[0].form.parent, REPLY_ROOT_RPID);
+  assert.equal(calls.posts[0].form.at_name_to_mid, '{}');
+  assert.equal(result.reply_to, undefined);
+});
+
+test('post_comment nested reply prefixes the parent author', async () => {
+  const { fake, calls } = commentReplyFake();
+  const result = await postComment(fake, {
+    dynamicId: REPLY_DYNAMIC_ID,
+    message: '嵌套原文',
+    root: REPLY_ROOT_RPID,
+    parent: REPLY_NESTED_RPID,
+    confirm: true,
+  });
+  assert.equal(calls.threads, 1);
+  assert.equal(calls.posts.length, 1);
+  assert.equal(calls.posts[0].form.message, '回复 @汐儿不是鱼 : 嵌套原文');
+  assert.equal(calls.posts[0].form.root, REPLY_ROOT_RPID);
+  assert.equal(calls.posts[0].form.parent, REPLY_NESTED_RPID);
+  assert.equal(calls.posts[0].form.at_name_to_mid, '{}');
+  assert.equal(result.reply_to, '汐儿不是鱼');
 });
 
 test('video comments use the WBI cursor endpoint', async () => {

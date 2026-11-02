@@ -129,6 +129,8 @@ test('MCP handshake, tool discovery, tool errors and ping', async (t) => {
   const likeDynamicTool = list.result.tools.find((tool) => tool.name === 'like_dynamic');
   assert.equal(likeDynamicTool.annotations.destructiveHint, false);
   assert.equal(likeDynamicTool.annotations.idempotentHint, true);
+  const postDynamicTool = list.result.tools.find((tool) => tool.name === 'post_dynamic');
+  assert.equal(postDynamicTool.inputSchema.properties.mention_user_ids.maxItems, 10);
 
   const unknown = await client.send('tools/call', { name: 'nope', arguments: {} });
   assert.equal(unknown.result.isError, true);

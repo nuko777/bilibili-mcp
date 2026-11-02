@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 36 个离线测试，不需要登录
+npm test          # 40 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -274,7 +274,7 @@ src/server.mjs
 | `toview_video` | 添加/移除视频到稍后再看 |
 | `send_danmaku` | 发送视频弹幕 |
 | `recall_danmaku` | 撤回自己发送的弹幕（通常限 2 分钟内） |
-| `post_dynamic` | 发布文本/图片动态，或传 `video` 转发视频动态 |
+| `post_dynamic` | 发布文本/图片动态、@ 用户（最多 10 个），或传 `video` 转发视频动态 |
 | `follow_user` | 关注/取关 |
 | `send_message` | 发送私信 |
 
@@ -299,6 +299,7 @@ mcp__bilibili__video_frames {"video": "BV1dan166EHf", "type": "grid", "count": 9
 mcp__bilibili__favorite_video {"video": "BV1dan166EHf", "folder_ids": ["4267463668", "4367445368"], "confirm": false}
 mcp__bilibili__like_dynamic {"dynamic_id": "1261344079956934665", "like": true, "confirm": false}
 mcp__bilibili__post_dynamic {"text": "分享视频", "video": "BV1w2Hw6KE1j", "confirm": false}
+mcp__bilibili__post_dynamic {"text": "测试动态", "mention_user_ids": ["3747573468761409"], "confirm": false}
 mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "测试", "mention_user_ids": ["3747573468761409"], "confirm": false}
 ```
 
@@ -325,7 +326,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 36 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 40 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -420,6 +421,8 @@ Cookie 等价于账号密码。
 - `notifications` / `messages` 归为只读工具，与 README 的读取分类一致
 - 新增 `like_dynamic`：动态点赞/取消点赞，默认 dry-run；`dynamic_detail` 增加 `stat.liked`
 - `like_dynamic` 的请求按浏览器实际抓包实现：`POST /x/dynamic/feed/dyn/thumb?csrf=...`，JSON 体为 `{dyn_id_str, up, spmid}`
+- `post_dynamic` 支持 `mention_user_ids`，按浏览器抓包构造 `contents` 的 `type:2` AT 组件；正文已有 `@昵称` 时就地转换，否则追加在末尾
+- `post_comment` 只在 `parent !== root`（真正的楼中楼）时自动生成 `回复 @父作者 : ` 前缀；直接回复顶层评论保持原文，符合浏览器实际请求
 
 ### 0.1.0-beta.5 — 2026-10-27
 

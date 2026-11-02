@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.5`（npm dist-tag：`beta`）：
+已发布 `0.1.0-beta.6`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -348,7 +348,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.5`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.5)（prerelease，含 npm tarball）。
+已发布：[`v0.1.0-beta.6`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.6)（prerelease，含 npm tarball）。
 
 ## 后续计划
 
@@ -416,15 +416,17 @@ Cookie 等价于账号密码。
 
 ## Changelog
 
-### 未发布
+### 0.1.0-beta.6 — 2026-11-03
 
 - `notifications` / `messages` 归为只读工具，与 README 的读取分类一致
-- 新增 `like_dynamic`：动态点赞/取消点赞，默认 dry-run；`dynamic_detail` 增加 `stat.liked`
+- 新增 `like_dynamic`：动态点赞/取消点赞，默认 dry-run；`dynamic_detail` 增加 `stat.liked`；工具总数更新为 44（25 读 + 19 写）
 - `like_dynamic` 的请求按浏览器实际抓包实现：`POST /x/dynamic/feed/dyn/thumb?csrf=...`，JSON 体为 `{dyn_id_str, up, spmid}`
 - `post_dynamic` 支持 `mention_user_ids`，按浏览器抓包构造 `contents` 的 `type:2` AT 组件；正文已有 `@昵称` 时就地转换，否则追加在末尾
 - `post_comment` 只在 `parent !== root`（真正的楼中楼）时自动生成 `回复 @父作者 : ` 前缀；直接回复顶层评论保持原文，符合浏览器实际请求
 - `bilibili-browser-comment` 脚本等待所有可观察的 fetch `upload_bfs` 上传结束并校验图片预览；发布前拦截可观察到的 fetch/XHR `/x/v2/reply/add`，请求体没有非空且带 URL 的 `pictures` 时中止，避免静默发成纯文本评论
-- 新增 `scripts/post-image-comment-agent-browser.mjs`：针对 agent-browser 环境，自动注入 MCP Cookie、内部重试/轮询，并返回 `rpid` 与 `has_image`；页面脚本结果新增 `has_image` / `picture_count` / `pictures`
+- 图片评论合并为 `scripts/post-image-comment-agent-browser.mjs` 单入口：自动注入 MCP Cookie、内部重试/轮询，返回 `rpid` 与 `has_image`；移除独立页面脚本和 CDP CLI
+- `bilibili-ops` / `bilibili-video-digest` skill 流程更新：按视频内容选择字幕或关键帧、补充弹幕/热门评论、动态阅读与发布后回读；明确 owner UID、@ 上下文、主动私信边界和日常节奏
+- 离线测试增加到 40 项，覆盖动态点赞、mention、楼中楼前缀和图片评论 guard
 
 ### 0.1.0-beta.5 — 2026-10-27
 

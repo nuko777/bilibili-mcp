@@ -365,7 +365,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
 - 读取通知/聊天记录会触发 B站已读状态；`notifications` 的 feed 结果、`messages` 的聊天记录都带 `read_side_effect` / `read_note`；未读数查询和会话列表带 `read_side_effect:false` / `read_note`。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
-- `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。请按 `bilibili-browser-comment` skill 在已登录浏览器中执行 `scripts/post-image-comment-browser.js`。
+- `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。图片评论按 `bilibili-browser-comment` skill 走 agent-browser（需 Node 24+ 和已安装的 agent-browser）：`node scripts/post-image-comment-agent-browser.mjs --url ... --image ... --text ...`（自动注入 MCP Cookie、内部轮询、返回 rpid/has_image）。
 - H5 热门卡片只提供标题/封面/BV/UP 名/观看数文本；UP 名和播放量由 `right_desc_*` 解析，其他统计字段不可用。
 
 ## 明确不实现
@@ -423,6 +423,8 @@ Cookie 等价于账号密码。
 - `like_dynamic` 的请求按浏览器实际抓包实现：`POST /x/dynamic/feed/dyn/thumb?csrf=...`，JSON 体为 `{dyn_id_str, up, spmid}`
 - `post_dynamic` 支持 `mention_user_ids`，按浏览器抓包构造 `contents` 的 `type:2` AT 组件；正文已有 `@昵称` 时就地转换，否则追加在末尾
 - `post_comment` 只在 `parent !== root`（真正的楼中楼）时自动生成 `回复 @父作者 : ` 前缀；直接回复顶层评论保持原文，符合浏览器实际请求
+- `bilibili-browser-comment` 脚本等待所有可观察的 fetch `upload_bfs` 上传结束并校验图片预览；发布前拦截可观察到的 fetch/XHR `/x/v2/reply/add`，请求体没有非空且带 URL 的 `pictures` 时中止，避免静默发成纯文本评论
+- 新增 `scripts/post-image-comment-agent-browser.mjs`：针对 agent-browser 环境，自动注入 MCP Cookie、内部重试/轮询，并返回 `rpid` 与 `has_image`；页面脚本结果新增 `has_image` / `picture_count` / `pictures`
 
 ### 0.1.0-beta.5 — 2026-10-27
 
@@ -514,7 +516,7 @@ src/
   core/                 HTTP、WBI、Cookie、配置、错误、格式化
   api/                  榜单、视频、互动、关系、收藏、消息、动态
   media/                字幕、关键帧、播放流、ffmpeg
-scripts/                Cookie 导入、只读验收、浏览器图片评论脚本
+scripts/                Cookie 导入、只读验收、agent-browser 图片评论快捷脚本
 skills/                 4 个 DSH skill（见 Skills 一节）
 test/                   离线 / MCP / live 测试
 ```

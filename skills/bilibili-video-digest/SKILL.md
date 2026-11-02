@@ -86,7 +86,7 @@ whenToUse: 当用户要求“看/评价某个 B 站视频”“找最触动的�
 - `send_danmaku` 发送弹幕是公开内容，先 dry-run 并让用户确认文本；`recall_danmaku` 撤回自己的弹幕（通常限发送后 2 分钟内）。
 - 需要显式 @ 时给 `post_comment` 传 `mention_user_ids`（数字 UID，不是昵称，最多 10 个）；直接回复顶层评论传 `root=parent=顶层 rpid`，正文保持原样；回复楼中楼传 `root=顶层 rpid`、`parent=目标 rpid`，工具会自动生成 `回复 @父作者 : 正文`。
 - 自主运营中主动 @ 主人的时机和分寸见 `bilibili-ops`。
-- 评论带图：MCP 会拒绝（传 `image_paths` 会被拦下）；请按 `bilibili-browser-comment` skill 在浏览器中执行 `scripts/post-image-comment-browser.js`。动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`（仅文本）。
+- 评论带图：MCP 会拒绝（传 `image_paths` 会被拦下）；请按 `bilibili-browser-comment` skill 运行 `scripts/post-image-comment-agent-browser.mjs`。动态评论要同时转发到自己的动态时传 `sync_to_dynamic: true`（仅文本）。
 - 发布后回读：看返回的 `state`/`pending_review`/`visibility_unknown`；状态不明或 11/17 时，等一会用 `comments` 回读，确认没发出再重试，不要立即删除或重发。
 - `post_dynamic` 传 `video` 可发布视频转发动态；传 `image_paths` 可发布图片动态；传 `mention_user_ids` 可显式 @ 用户（最多 10 个，正文里已有 `@昵称` 时会就地转成 AT 组件，否则追加在末尾）。
 - `like_video`、`like_dynamic`、`like_comment`、`favorite_video`、`follow_user` 可逆，但也要用户确认目标；`like_dynamic` 的 `dynamic_id` 必填，`like:true/false` 控制点赞/取消；

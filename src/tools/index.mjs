@@ -667,7 +667,7 @@ export const tools = [
     name: 'post_comment',
     title: '发表评论 / 回复',
     description:
-      '在视频或动态下发表评论（仅文本）；提供 root/parent 可回复某条评论。只有 parent 与 root 不同（真正的楼中楼）才自动生成 回复 @父作者 : 前缀；直接回复顶层评论保持原文。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。带图评论会被拒绝，请按 bilibili-browser-comment skill 在已登录浏览器中执行 scripts/post-image-comment-browser.js。',
+      '在视频或动态下发表评论（仅文本）；提供 root/parent 可回复某条评论。只有 parent 与 root 不同（真正的楼中楼）才自动生成 回复 @父作者 : 前缀；直接回复顶层评论保持原文。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。带图评论会被拒绝，请按 bilibili-browser-comment skill 运行 scripts/post-image-comment-agent-browser.mjs。',
     annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,

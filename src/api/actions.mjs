@@ -9,7 +9,7 @@ import { accountInfo } from './account.mjs';
 import { listFavoriteFolders } from './favorites.mjs';
 
 const IMAGE_COMMENT_BLOCKED_HINT =
-  'MCP 不发布图片评论（API 图片评论可能仅自己可见）。请按 bilibili-browser-comment skill 的说明，在已登录浏览器中执行 scripts/post-image-comment-browser.js 发布。';
+  'MCP 不发布图片评论（API 图片评论可能仅自己可见）。请按 bilibili-browser-comment skill 的说明，运行 scripts/post-image-comment-agent-browser.mjs 发布。';
 
 function preview(action, target, details = {}, hint = '未执行任何写操作。将 confirm 设为 true 后才会真正执行。') {
   return {

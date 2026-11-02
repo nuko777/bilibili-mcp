@@ -521,7 +521,7 @@ test('image comments are blocked before any API call', async () => {
       imagePaths: ['C:/tmp/7.png'],
       confirm: true,
     }),
-    (error) => error.code === -400 && /post-image-comment-browser\.js/.test(error.hint || ''),
+    (error) => error.code === -400 && /post-image-comment-agent-browser\.mjs/.test(error.hint || ''),
   );
 });
 

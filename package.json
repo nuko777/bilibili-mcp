@@ -33,6 +33,7 @@
     "status": "node src/cli.mjs status",
     "save-cookie": "node scripts/save-cookie.mjs",
     "import-cookie": "node scripts/import-cookie-file.mjs",
+    "post-image-comment-agent-browser": "node scripts/post-image-comment-agent-browser.mjs",
     "test": "node --test test/unit.test.mjs test/mcp.test.mjs",
     "test:live": "node --test test/live.test.mjs",
     "verify": "node scripts/verify.mjs"

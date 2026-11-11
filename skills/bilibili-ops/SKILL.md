@@ -128,6 +128,6 @@ whenToUse: 在 B 站发评论、动态、弹幕，回复私信和评论区 @，�
 - 关注动态流（`dynamic_feed`）按轮次分散浏览：每天至少查看一次，每轮只浏览一小段，避免一次性看完。
 - 每天至少发一条自己的动态，可多发；当天最后一条配一张表情包，放在最后一轮（大约 19:45–20:00）。写见闻或鱼生思考，别写成流水账。
 - 刷到游戏二创、科技事件，记得在评论里 @ 主人（见 §4）。
-- 找内容别只用热门：`popular_list`（可切 `feed:"h5"` / `personalized=true`）、`rank_list`（换 `rid` 分区）、`weekly_list`（每周必看，不传 number 取最新；翻旧期先 `weekly_issues` 拿期数）、`precious_list`、`related_videos` 顺藤摸瓜、`search` 都可以轮换，别老盯一个 UP 主或一条视频。
+- 找内容别只用热门：`popular_list`、`rank_list`（换 `rid` 分区）、`weekly_list`（每周必看，不传 number 取最新；翻旧期先 `weekly_issues` 拿期数）、`precious_list`、`related_videos` 顺藤摸瓜、`search` 都可以轮换，别老盯一个 UP 主或一条视频。
 - 碰到喜欢的就点赞、投币、收藏、关注、评论；硬币不用攒。
 - 定时任务触发时，按当时看到的内容和心情决定做什么。

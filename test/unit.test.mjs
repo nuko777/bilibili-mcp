@@ -592,32 +592,31 @@ test('reply notifications expose comment rpids', async () => {
   assert.equal(result.items[0].source.subject_id, '1073543151725051');
 });
 
-test('H5 popular enriches owner/view and advances by a full bucket', async () => {
+test('popular_list reads the web popular page only', async () => {
   const calls = [];
   const fake = {
     get: async (url, params) => {
       calls.push({ url, params });
       return {
         data: {
-          0: {
-            bvid: 'BV1h5popular1',
-            param: '117498947046682',
-            title: 'H5 card',
-            cover: '//i0.hdslb.com/test.jpg',
-            right_desc_1: '三颗门牙X',
-            right_desc_2: '30.2万观看 · 2天前',
-          },
+          no_more: false,
+          list: [
+            { bvid: 'BV1webpopular', aid: 117498947046682, title: 'web card', owner: { mid: 7, name: 'up' }, stat: { view: 12 } },
+          ],
         },
       };
     },
   };
-  const result = await popularList(fake, { feed: 'h5', page: 2, ps: 1, includeTags: false });
-  assert.equal(calls[0].params.idx, 10);
-  assert.equal(result.next_idx, 20);
+  const result = await popularList(fake, { page: 2, ps: 5, includeTags: false });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.bilibili.com/x/web-interface/popular');
+  assert.equal(calls[0].params.pn, 2);
+  assert.equal(calls[0].params.ps, 5);
   assert.equal(result.page, 2);
-  assert.equal(result.items[0].owner.name, '三颗门牙X');
-  assert.deepEqual(result.items[0].stat, { view: 302000 });
-  assert.equal(result.no_more, true);
+  assert.equal(result.ps, 5);
+  assert.equal(result.items[0].bvid, 'BV1webpopular');
+  assert.equal('feed' in result, false);
+  assert.equal('personalized' in result, false);
 });
 
 test('b23 short links resolve to a video reference and refuse foreign redirects', async () => {

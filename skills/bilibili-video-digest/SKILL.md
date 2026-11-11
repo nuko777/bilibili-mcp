@@ -59,7 +59,7 @@ whenToUse: 当用户要求“看/评价某个 B 站视频”“找最触动的�
 ## 2. 榜单 / 热门 / 每周必看
 
 - 排行榜：`mcp__bilibili__rank_list`，可传 `rid` 分区、`type`；
-- 综合热门：`mcp__bilibili__popular_list`；默认 Web 热门页，`feed:"h5"` 走 H5 热门流（10 卡一桶，`idx` 按 10 递增，已解析 `owner`/`stat.view`），`personalized=true` 走 Web 个性化推荐；
+- 综合热门：`mcp__bilibili__popular_list`；Web 热门页（`page` / `ps` 分页，每页最多 20 条）；
 - 每周必看：先 `weekly_issues` 找期数，再 `weekly_list`（不传 number 默认最新）；
 - 标签由工具逐条补齐，默认只补前 20 条；需要更省请求时设 `include_tags=false`，或降低 `tag_limit`。
 

@@ -206,7 +206,7 @@ src/server.mjs
 | 登录态 | `/x/web-interface/nav` |
 | 用户信息 | `/x/space/wbi/acc/info`、`/x/relation/stat`、`/x/space/upstat`、`/x/space/navnum` |
 | 排行榜 | `/x/web-interface/ranking/v2` |
-| 综合热门 | Web（默认）：`/x/web-interface/popular`；H5（`feed:"h5"`）：`app.bilibili.com/x/v2/show/popular/index` |
+| 综合热门 | `/x/web-interface/popular` |
 | 每周必看 | `/x/web-interface/popular/series/list`、`series/one` |
 | 视频详情 | `/x/web-interface/view` |
 | 字幕 | `/x/player/wbi/v2` |
@@ -308,7 +308,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 - `dynamic_feed` 优先使用 `offset` 游标；`page` 是便捷封装。
 - 其他列表使用 `page` / `ps` / `limit`，具体见工具 schema。
 - `user_dynamics` 不传 `mid` 时读取自己的空间动态；传 `mid` 读取任意用户动态。
-- `popular_list` 默认走 Web 热门页（`/x/web-interface/popular`）；`feed:"h5"` 时走 H5 热门流（10 卡一桶，`idx` 按 10 递增）；`personalized=true` 使用 Web 个性化推荐。H5 卡片的 UP 名/观看数已从 `right_desc_*` 解析到 `owner`/`stat.view`，其他统计字段不可用。
+- `popular_list` 使用 Web 热门页（`/x/web-interface/popular`），`page` / `ps` 分页，每页最多 20 条；标签补齐默认只补前 20 条。
 - 标签补齐默认只补前 20 条；设置 `include_tags=false` 可减少请求。
 
 ## 配置
@@ -366,7 +366,6 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 读取通知/聊天记录会触发 B站已读状态；`notifications` 的 feed 结果、`messages` 的聊天记录都带 `read_side_effect` / `read_note`；未读数查询和会话列表带 `read_side_effect:false` / `read_note`。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
 - `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。图片评论按 `bilibili-browser-comment` skill 走 agent-browser（需 Node 24+ 和已安装的 agent-browser）：`node scripts/post-image-comment-agent-browser.mjs --url ... --image ... --text ...`（自动注入 MCP Cookie、内部轮询、返回 rpid/has_image）。
-- H5 热门卡片只提供标题/封面/BV/UP 名/观看数文本；UP 名和播放量由 `right_desc_*` 解析，其他统计字段不可用。
 
 ## 明确不实现
 

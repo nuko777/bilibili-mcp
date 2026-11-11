@@ -293,7 +293,6 @@ export async function createFavoriteFolder(client, { title, intro = '', privacy 
     folder: result.data
       ? {
           id: String(result.data.id),
-          fid: String(result.data.fid),
           title: result.data.title,
           privacy: Number(result.data.attr ?? 0) & 1,
           attr: Number(result.data.attr ?? 0),

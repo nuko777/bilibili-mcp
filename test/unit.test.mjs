@@ -25,6 +25,7 @@ import {
   sendMessage,
 } from '../src/api/actions.mjs';
 import { videoFrames } from '../src/media/frames.mjs';
+import { listFavoriteFolders } from '../src/api/favorites.mjs';
 import { decodeDanmakuSeg, decodeDanmakuView } from '../src/api/danmaku.mjs';
 
 const IMG = '7cd084941338484aae1ad9425b84077c';
@@ -510,6 +511,23 @@ test('favorite folder edits read a fresh folder snapshot', async () => {
   assert.equal(result.details.next_title, 'new');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].options.cacheTtl, 0);
+});
+
+test('favorite folder listings expose only media_id, never legacy fid', async () => {
+  const fake = {
+    uid: '42',
+    get: async () => ({
+      data: {
+        list: [
+          { id: 4312261209, fid: 43122612, title: '默认收藏夹', attr: 0, media_count: 28 },
+        ],
+      },
+    }),
+  };
+  const result = await listFavoriteFolders(fake);
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].id, '4312261209');
+  assert.equal('fid' in result.items[0], false);
 });
 
 test('image comments are blocked before any API call', async () => {

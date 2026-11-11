@@ -3,8 +3,10 @@ import { safeArray, toHttps } from '../core/format.mjs';
 function normalizeFolder(folder) {
   const attr = Number(folder.attr ?? folder.privacy ?? 0);
   return {
+    // Only `id` (media_id) is usable as folder_id. The legacy `fid` is a
+    // short id from the old web UI: it is not accepted by the fav APIs and
+    // happens to collide with other users' media_id, so it is not exposed.
     id: String(folder.id || ''),
-    fid: folder.fid ? String(folder.fid) : null,
     title: folder.title || '',
     count: folder.media_count ?? folder.count ?? 0,
     // Bilibili's folder attr is a bitmask; bit0 is the private flag.

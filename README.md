@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.6`（npm dist-tag：`beta`）：
+已发布 `0.1.0-beta.7`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -348,7 +348,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.6`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.6)（prerelease，含 npm tarball）。
+已发布：[`v0.1.0-beta.7`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.7)（prerelease，含 npm tarball）。
 
 ## 后续计划
 
@@ -414,6 +414,14 @@ Cookie 等价于账号密码。
 如果发现安全问题，请通过仓库 issue 或维护者公开联系方式报告，不要在 issue 中粘贴 Cookie、SESSDATA、bili_jct 或完整请求头。
 
 ## Changelog
+
+### 0.1.0-beta.7 — 2026-11-12
+
+- 收藏夹接口不再返回 `fid`：`list_favorites` / `create_favorite_folder` 只暴露 `id`（media_id）；`fid` 不被 fav API 接受，且可能撞上别人的同名 media_id（写操作报 `11010`）
+- `popular_list` 只保留 Web 热门页：移除 H5 流（`feed:"h5"`、`idx`）和空转的 `personalized` 参数，H5 卡片字段本就不全
+- `bilibili-video-digest` 收敛为单个视频的理解（元信息、字幕/关键帧选型、返回字段与默认值、失败处理），参数范围交给工具 schema，130 → 37 行
+- `bilibili-ops` 重写为运营规范：三档交互策略、评论/楼中楼与带图规则、表情包配额、硬币余额上限 10、暗号与安全
+- 离线测试 41 项
 
 ### 0.1.0-beta.6 — 2026-11-03
 

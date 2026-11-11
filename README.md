@@ -344,7 +344,8 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 1. 更新 `package.json` 版本号和下方 Changelog；
 2. 提交并打 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`；
 3. GitHub Actions 会运行测试、`npm pack`、上传 tarball、创建 GitHub Release；
-4. 若仓库配置了 `NPM_TOKEN` secret，还会执行 `npm publish --provenance`（已发布的版本会跳过）。
+4. 若仓库配置了 `NPM_TOKEN` secret，还会执行 `npm publish --provenance`（已发布的版本会跳过）；
+5. 预发布版本发布后会把 `latest` 一并指到该版本；一旦发布过正式版，`latest` 就保持在正式版，不再被新的 beta 覆盖。
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 

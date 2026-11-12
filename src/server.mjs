@@ -23,6 +23,7 @@ const INSTRUCTIONS = `B站 MCP（${tools.length} 个工具）。使用前需由�
 读取类：${READ_TOOLS.join(' / ')}。
 写入类：${WRITE_TOOLS.join(' / ')}。
 写入类工具默认 dry-run；只有 confirm=true 才会真正执行。投币不可撤销，发布评论/动态/私信是公开行为，执行前先向用户确认内容。
+每天首次使用前运行 node scripts/cookie.mjs --refresh-ticket 刷新并写回 bili_ticket；auth_status 只返回元数据，不返回 Cookie 值。
 标签补齐是逐条请求，列表默认只补前 20 条；需要更少请求时设置 include_tags=false。`;
 
 let client;

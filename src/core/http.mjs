@@ -1,6 +1,7 @@
 import { BiliError, assertSuccess, hintForCode, hintForStatus } from './errors.mjs';
 import { parseCookieHeader, serializeCookies } from './cookies.mjs';
 import { buildQuery, encodeWbiValue, extractWbiKeys, signParams } from './wbi.mjs';
+import { buildTicketParams, TICKET_ENDPOINT, TICKET_TTL_SECONDS } from './ticket.mjs';
 
 const DEFAULT_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36';
@@ -169,6 +170,44 @@ export class BiliClient {
     } finally {
       this.buvidPromise = null;
     }
+  }
+
+  /**
+   * Request a fresh bili_ticket. Only updates this client's in-memory cookies;
+   * callers decide whether to persist the returned pair locally.
+   */
+  async refreshBiliTicket({ now = Date.now() } = {}) {
+    const timestamp = Math.floor(now / 1000);
+    const json = await this.request(TICKET_ENDPOINT, {
+      method: 'POST',
+      params: buildTicketParams(timestamp, this.csrf),
+      allowCodes: [0, -101],
+      retry: 0,
+      timeoutMs: 10_000,
+    });
+    const data = json?.data || {};
+    if (!data.ticket || typeof data.ticket !== 'string') {
+      throw new BiliError('GenWebTicket 未返回 ticket', {
+        code: json?.code,
+        endpoint: '/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket',
+        details: json,
+      });
+    }
+    const ttl = Number(data.ttl) || TICKET_TTL_SECONDS;
+    const createdAt = Number(data.created_at) || timestamp;
+    const expiresAt = createdAt + ttl;
+    const cookies = {
+      bili_ticket: data.ticket,
+      bili_ticket_expires: String(expiresAt),
+    };
+    this.cookies.bili_ticket = cookies.bili_ticket;
+    this.cookies.bili_ticket_expires = cookies.bili_ticket_expires;
+    return {
+      cookies,
+      created_at: createdAt,
+      ttl,
+      expires_at: new Date(expiresAt * 1000).toISOString(),
+    };
   }
 
   async getWbiMixin(force = false) {

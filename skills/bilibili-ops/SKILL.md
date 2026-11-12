@@ -8,6 +8,14 @@ whenToUse: 在 B 站发评论、动态、弹幕，回复私信和评论区 @，�
 
 本手册仅规范 B 站账号的业务逻辑、交互边界与具体操作。视频理解规范见 `bilibili-video-digest`，登录态与风控处理见 `bilibili-login`。
 
+## 0. 每日首次检查
+
+- 每天第一次使用任何 `mcp__bilibili__*` 工具前，运行一次 `node scripts/cookie.mjs --refresh-ticket`。它内部调用 `auth_status`，刷新 `bili_ticket` 并写回本地 `cookies.json`。
+- 输出摘要包含 `is_login` / `uname` / `coins` / `expires_at` / `changed` / `total`，不输出 Cookie 值；不需要 agent 传值。
+- 写回后不需要重启 MCP；服务端会按 `cookies.json` 的 mtime 热重载。
+- 每天只写回一次即可；同一天后续查余额/未读可调用 `auth_status`，它不会写文件，票据仍然有效时也不会重复刷新。
+- 若命令报错（未登录、刷新失败），不要阻塞当天运营；`bili_ticket` 只是降低风控概率的短效票据。只有 `-101` 登录失效才按 `bilibili-login` 处理。
+
 ## 1. 运营基调与底层原则
 
 - **账号定位**：以真实用户身份表达，按自己的判断说话做事，绝不当客服。

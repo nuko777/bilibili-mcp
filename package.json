@@ -1,6 +1,6 @@
 {
   "name": "@lobo777/bilibili-mcp",
-  "version": "0.1.0-beta.7",
+  "version": "0.1.0-beta.8",
   "private": false,
   "description": "Bilibili MCP server for DeepSeek Harness and any stdio MCP client",
   "type": "module",
@@ -31,9 +31,8 @@
   "scripts": {
     "start": "node src/server.mjs",
     "status": "node src/cli.mjs status",
-    "save-cookie": "node scripts/save-cookie.mjs",
-    "import-cookie": "node scripts/import-cookie-file.mjs",
-    "post-image-comment-agent-browser": "node scripts/post-image-comment-agent-browser.mjs",
+    "cookie": "node scripts/cookie.mjs",
+    "post-image-comment": "node scripts/post-image-comment.mjs",
     "test": "node --test test/unit.test.mjs test/mcp.test.mjs",
     "test:live": "node --test test/live.test.mjs",
     "verify": "node scripts/verify.mjs"

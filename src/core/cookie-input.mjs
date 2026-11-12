@@ -1,9 +1,8 @@
-import fs from 'node:fs/promises';
-import { paths, writeStoredCookies } from './config.mjs';
-import { missingLoginCookies, parseCookieHeader, serializeCookies } from './cookies.mjs';
+import { parseCookieHeader, serializeCookies } from './cookies.mjs';
 import { BiliClient } from './http.mjs';
 
 const MAX_COOKIE_LENGTH = 8192;
+const UNSAFE_COOKIE_VALUE = /["{};,\\\s\x00-\x1f\x7f]/;
 
 export function normalizeCookieMap(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -36,9 +35,115 @@ export function parseCookieInput(raw) {
   return normalizeCookieMap(parseCookieHeader(trimmed));
 }
 
-export async function readCookieFile(filePath) {
-  const raw = await fs.readFile(filePath, 'utf8');
-  return parseCookieInput(raw);
+/**
+ * Normalize a cookie map and drop values that would break a Cookie header.
+ * Only names and reasons are reported, never values.
+ */
+export function sanitizeCookieMap(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Cookie 数据必须是对象');
+  }
+  const cookies = {};
+  const skipped = [];
+  for (const [name, raw] of Object.entries(input)) {
+    const value = raw === undefined || raw === null ? '' : String(raw).trim();
+    if (!/^[A-Za-z0-9_]+$/.test(name) || name.length > 64) {
+      skipped.push({ name, reason: 'invalid_name' });
+      continue;
+    }
+    if (!value) {
+      skipped.push({ name, reason: 'empty_value' });
+      continue;
+    }
+    if (value.length > MAX_COOKIE_LENGTH) {
+      skipped.push({ name, reason: 'value_too_long' });
+      continue;
+    }
+    if (UNSAFE_COOKIE_VALUE.test(value)) {
+      skipped.push({ name, reason: 'unsafe_value' });
+      continue;
+    }
+    cookies[name] = value;
+  }
+  return { cookies, skipped };
+}
+
+/**
+ * Unified stdin parser for scripts/cookie.mjs.
+ *
+ * Supported inputs:
+ * - canonical JSON `{ "cookies": { ... } }` (cookies.json has this shape);
+ * - a Cookie header string;
+ * - agent-browser `cookies get` line output (one name=value per line).
+ */
+export function parseCookiePayload(raw) {
+  const text = String(raw || '').trim().replace(/^cookie:\s*/i, '');
+  if (!text) throw new Error('Cookie 输入为空');
+  if (text.startsWith('{')) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error('Cookie JSON 格式错误');
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Cookie JSON 必须是对象');
+    }
+    if (!parsed.cookies || typeof parsed.cookies !== 'object' || Array.isArray(parsed.cookies)) {
+      throw new Error('JSON 必须是 { "cookies": { ... } }；请传 cookies.json，或自己包一层 { cookies: ... }');
+    }
+    const { cookies, skipped } = sanitizeCookieMap(parsed.cookies);
+    return { cookies, skipped, format: 'json' };
+  }
+
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1 && lines.every((line) => line.includes('=')) && !text.includes('; ')) {
+    const { cookies, skipped } = parseAgentBrowserCookies(text);
+    return { cookies, skipped, format: 'lines' };
+  }
+
+  const { cookies, skipped } = sanitizeCookieMap(parseCookieHeader(text));
+  return { cookies, skipped, format: 'header' };
+}
+
+/**
+ * Parse the line-oriented output of `agent-browser cookies get` (one
+ * `name=value` per line). Values that would poison a Cookie header — quotes,
+ * braces, separators or whitespace — are dropped, as is `bmg_af_sc`-style JSON.
+ * Only names and reasons are reported, never the values.
+ */
+export function parseAgentBrowserCookies(raw) {
+  const cookies = {};
+  const skipped = [];
+  String(raw || '').split(/\r?\n/).forEach((line, index) => {
+    const text = line.trim();
+    if (!text) return;
+    const separator = text.indexOf('=');
+    if (separator <= 0) {
+      skipped.push({ line: index + 1, reason: 'malformed' });
+      return;
+    }
+    const name = text.slice(0, separator).trim();
+    const value = text.slice(separator + 1).trim();
+    if (!/^[A-Za-z0-9_]+$/.test(name) || name.length > 64) {
+      skipped.push({ line: index + 1, name, reason: 'invalid_name' });
+      return;
+    }
+    if (!value) {
+      skipped.push({ line: index + 1, name, reason: 'empty_value' });
+      return;
+    }
+    if (value.length > MAX_COOKIE_LENGTH) {
+      skipped.push({ line: index + 1, name, reason: 'value_too_long' });
+      return;
+    }
+    if (UNSAFE_COOKIE_VALUE.test(value)) {
+      skipped.push({ line: index + 1, name, reason: 'unsafe_value' });
+      return;
+    }
+    cookies[name] = value;
+  });
+  return { cookies, skipped };
 }
 
 export async function verifyCookies(cookies) {
@@ -52,36 +157,5 @@ export async function verifyCookies(cookies) {
     mid: nav.data?.mid ? String(nav.data.mid) : '',
     coins: nav.data?.money ?? null,
     level: nav.data?.level_info?.current_level ?? null,
-  };
-}
-
-/**
- * Save cookies only after an optional verification succeeds. On failure the
- * existing cookie file is left untouched.
- */
-export async function saveCookies(cookies, { verify = false, source = 'external' } = {}) {
-  const normalized = normalizeCookieMap(cookies);
-  if (!normalized.SESSDATA) {
-    throw new Error('缺少 SESSDATA；请提供完整的 B 站 Cookie');
-  }
-  const missing = missingLoginCookies(normalized);
-  let verification = null;
-  if (verify) {
-    verification = await verifyCookies(normalized);
-    if (!verification.ok) {
-      throw new Error('Cookie 验证失败：nav 未返回登录态');
-    }
-  }
-  await writeStoredCookies(normalized, source);
-  return {
-    ok: true,
-    path: paths().cookieFile,
-    cookie_names: Object.keys(normalized).sort(),
-    missing_recommended: missing,
-    verify: verification || undefined,
-    hint:
-      missing.length
-        ? '缺少部分推荐 Cookie；只读功能可能可用，写操作（点赞/投币/评论等）需要 bili_jct 与 DedeUserID。'
-        : '登录态已写入，可调用 auth_status 校验。',
   };
 }

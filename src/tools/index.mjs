@@ -77,7 +77,7 @@ export const tools = [
     name: 'auth_status',
     title: 'B站登录态与账号状态',
     description:
-      '读取当前 B 站登录态、昵称、UID、硬币、等级、未读通知/私信数。MCP 不提取登录态；未登录时请使用 bilibili-login skill 从浏览器注入 Cookie。',
+      '读取当前 B 站登录态、昵称、UID、硬币、等级、未读通知/私信数，并按需刷新当前进程的 bili_ticket。本地写回用 node scripts/cookie.mjs --refresh-ticket；工具只返回元数据，不返回 Cookie 值。MCP 不提取登录态；未登录时请使用 bilibili-login skill 从浏览器注入 Cookie。',
     annotations: readOnly(),
     inputSchema: schema({}),
     handler: async (_args, ctx) => authStatus(ctx.client),
@@ -661,7 +661,7 @@ export const tools = [
     name: 'post_comment',
     title: '发表评论 / 回复',
     description:
-      '在视频或动态下发表评论（仅文本）；提供 root/parent 可回复某条评论。只有 parent 与 root 不同（真正的楼中楼）才自动生成 回复 @父作者 : 前缀；直接回复顶层评论保持原文。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。带图评论会被拒绝，请按 bilibili-browser-comment skill 运行 scripts/post-image-comment-agent-browser.mjs。',
+      '在视频或动态下发表评论（仅文本）；提供 root/parent 可回复某条评论。只有 parent 与 root 不同（真正的楼中楼）才自动生成 回复 @父作者 : 前缀；直接回复顶层评论保持原文。默认只预览；confirm=true 才发布。评论是公开内容。state=11/17 可能是审核/索引延迟，返回 pending_review，不要据此立即删除。带图评论会被拒绝，请按 bilibili-browser-comment skill 运行 scripts/post-image-comment.mjs。',
     annotations: write({ destructive: false, idempotent: false }),
     inputSchema: schema({
       video: videoRef,

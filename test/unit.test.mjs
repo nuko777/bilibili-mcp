@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { buildQuery, extractWbiKeys, getMixinKey, signParams } from '../src/core/wbi.mjs';
 import { normalizeCookieObjects, parseCookieHeader, serializeCookies, missingLoginCookies } from '../src/core/cookies.mjs';
+import { parseAgentBrowserCookies, parseCookiePayload } from '../src/core/cookie-input.mjs';
+import { authStatus } from '../src/api/account.mjs';
 import { normalizeDynamic } from '../src/api/dynamics.mjs';
 import { parseMessageContent } from '../src/api/messages.mjs';
 import { normalizeVideo, parseVideoRef, resolveFrameTimes, formatDuration } from '../src/core/format.mjs';
@@ -539,7 +545,7 @@ test('image comments are blocked before any API call', async () => {
       imagePaths: ['C:/tmp/7.png'],
       confirm: true,
     }),
-    (error) => error.code === -400 && /post-image-comment-agent-browser\.mjs/.test(error.hint || ''),
+    (error) => error.code === -400 && /post-image-comment\.mjs/.test(error.hint || ''),
   );
 });
 
@@ -1002,4 +1008,238 @@ test('video comments use the WBI cursor endpoint', async () => {
   assert.equal(result.top_replies.length, 1);
   assert.equal(result.top_replies[0].is_top, true);
   assert.equal(result.total, 2);
+});
+
+test('auth_status refreshes bili_ticket with the browser signature', async () => {
+  const client = new BiliClient({
+    cookieHeader: 'SESSDATA=session; DedeUserID=42; bili_jct=csrf-token',
+  });
+  const calls = [];
+  client.request = async (url, options) => {
+    calls.push({ url, options });
+    return {
+      code: 0,
+      data: {
+        ticket: 'header.payload.signature',
+        created_at: 1700000000,
+        ttl: 259200,
+      },
+    };
+  };
+  const refreshed = await client.refreshBiliTicket({ now: 1700000000000 });
+  assert.equal(calls[0].url, 'https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.equal(calls[0].options.params.key_id, 'ec02');
+  assert.equal(calls[0].options.params['context[ts]'], '1700000000');
+  assert.equal(calls[0].options.params.csrf, 'csrf-token');
+  assert.equal(
+    calls[0].options.params.hexsign,
+    'bb79f0d980ffbb51597aa1a3e8b55603025cc1322ac766f4c1a98852e6182514',
+  );
+  assert.equal(client.cookies.bili_ticket, 'header.payload.signature');
+  assert.equal(client.cookies.bili_ticket_expires, '1700259200');
+  assert.equal(refreshed.expires_at, new Date(1700259200 * 1000).toISOString());
+});
+
+test('auth_status returns ticket metadata without cookie values', async () => {
+  const client = {
+    get: async (url) => {
+      if (url.endsWith('/x/web-interface/nav')) {
+        return { code: 0, data: { isLogin: true, uname: 'tester', mid: 42 } };
+      }
+      return { code: 0, data: {} };
+    },
+    refreshBiliTicket: async () => ({
+      cookies: { bili_ticket: 'ticket', bili_ticket_expires: '1700259200' },
+      expires_at: '2023-11-17T22:13:20.000Z',
+    }),
+  };
+  const status = await authStatus(client);
+  assert.equal(status.is_login, true);
+  assert.equal(status.cookie_update.cookies, undefined);
+  assert.equal(status.cookie_update.expires_at, '2023-11-17T22:13:20.000Z');
+  assert.match(status.cookie_update_hint, /refresh-ticket/);
+  assert.equal(status.cookie_update_error, undefined);
+});
+
+test('auth_status skips ticket refresh while the stored ticket is fresh', async () => {
+  let refreshCalls = 0;
+  const client = {
+    cookies: {
+      bili_ticket: 'cached-ticket',
+      bili_ticket_expires: String(Math.floor(Date.now() / 1000) + 3600),
+    },
+    get: async (url) => {
+      if (url.endsWith('/x/web-interface/nav')) {
+        return { code: 0, data: { isLogin: true, uname: 'tester', mid: 42 } };
+      }
+      return { code: 0, data: {} };
+    },
+    refreshBiliTicket: async () => {
+      refreshCalls += 1;
+      return { expires_at: '2026-11-15T00:00:00.000Z' };
+    },
+  };
+  const status = await authStatus(client);
+  assert.equal(refreshCalls, 0);
+  assert.equal(status.is_login, true);
+  assert.equal(status.cookie_update, undefined);
+});
+
+test('auth_status keeps working when ticket refresh fails', async () => {
+  const client = {
+    get: async (url) => {
+      if (url.endsWith('/x/web-interface/nav')) {
+        return { code: 0, data: { isLogin: true, uname: 'tester', mid: 42 } };
+      }
+      return { code: 0, data: {} };
+    },
+    refreshBiliTicket: async () => {
+      throw new Error('network down');
+    },
+  };
+  const status = await authStatus(client);
+  assert.equal(status.is_login, true);
+  assert.equal(status.cookie_update, undefined);
+  assert.match(status.cookie_update_error, /network down/);
+});
+
+test('agent-browser cookie export filters unsafe values', () => {
+  const raw = [
+    'SESSDATA=abc%2C123%2Cxyz',
+    'bili_jct=deadbeef',
+    'bmg_af_sc={"none":{"on":1,"def":"i1.hdslb.com"}}',
+    'buvid4=ABC++/DEF-123',
+    "rpdid=|(YuuJ~|llR0J'u~mRRm~R|m",
+    'bad name=value',
+    'empty=',
+    '',
+    'malformed',
+  ].join('\r\n');
+  const { cookies, skipped } = parseAgentBrowserCookies(raw);
+  assert.equal(cookies.SESSDATA, 'abc%2C123%2Cxyz');
+  assert.equal(cookies.bili_jct, 'deadbeef');
+  assert.equal(cookies.buvid4, 'ABC++/DEF-123');
+  assert.equal(cookies.rpdid, "|(YuuJ~|llR0J'u~mRRm~R|m");
+  assert.equal(cookies.bmg_af_sc, undefined);
+  assert.equal(cookies['bad name'], undefined);
+  assert.equal(cookies.empty, undefined);
+  assert.ok(skipped.some((item) => item.name === 'bmg_af_sc' && item.reason === 'unsafe_value'));
+  assert.ok(skipped.some((item) => item.name === 'bad name' && item.reason === 'invalid_name'));
+  assert.ok(skipped.some((item) => item.name === 'empty' && item.reason === 'empty_value'));
+  assert.ok(skipped.some((item) => item.reason === 'malformed' && item.line > 0));
+});
+
+test('cookie payload accepts canonical JSON and filters unsafe values', () => {
+  const raw = JSON.stringify({
+    version: 1,
+    savedAt: '2026-11-13T00:00:00.000Z',
+    source: 'file',
+    cookies: {
+      SESSDATA: 'session',
+      bili_jct: 'csrf',
+      bmg_af_sc: '{"none":1}',
+    },
+  });
+  const result = parseCookiePayload(raw);
+  assert.equal(result.format, 'json');
+  assert.equal(result.cookies.SESSDATA, 'session');
+  assert.equal(result.cookies.bili_jct, 'csrf');
+  assert.equal(result.cookies.bmg_af_sc, undefined);
+  assert.deepEqual(result.skipped.map((item) => item.name), ['bmg_af_sc']);
+});
+
+test('cookie payload rejects flat maps and full auth_status envelopes', () => {
+  assert.throws(() => parseCookiePayload('{"SESSDATA":"session"}'), /cookies/);
+  assert.throws(
+    () => parseCookiePayload(JSON.stringify({
+      is_login: true,
+      cookie_update: { cookies: { SESSDATA: 'session' } },
+    })),
+    /cookies/,
+  );
+});
+
+test('cookie payload detects header and agent-browser line formats', () => {
+  const header = parseCookiePayload('SESSDATA=session; bili_jct=csrf');
+  assert.equal(header.format, 'header');
+  assert.equal(header.cookies.bili_jct, 'csrf');
+
+  const prefixed = parseCookiePayload('Cookie: SESSDATA=session; bili_jct=csrf');
+  assert.equal(prefixed.cookies.SESSDATA, 'session');
+  assert.equal(prefixed.cookies.bili_jct, 'csrf');
+
+  const lines = parseCookiePayload('SESSDATA=session\r\nbili_jct=csrf\r\nbmg_af_sc={"x":1}\r\n');
+  assert.equal(lines.format, 'lines');
+  assert.equal(lines.cookies.SESSDATA, 'session');
+  assert.equal(lines.cookies.bmg_af_sc, undefined);
+  assert.ok(lines.skipped.some((item) => item.name === 'bmg_af_sc'));
+});
+
+test('cookie CLI saves and merges stdin without temporary files', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bili-cookie-cli-'));
+  const run = (args, input) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['scripts/cookie.mjs', ...args], {
+      cwd: process.cwd(),
+      env: { ...process.env, BILI_CONFIG_DIR: dir },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+    child.stdin.end(input);
+  });
+
+  const lines = [
+    'SESSDATA=session',
+    'bili_jct=csrf',
+    'bmg_af_sc={"none":1}',
+    '',
+  ].join('\n');
+  try {
+    const conflict = await run(['--refresh-ticket', '--save'], '');
+    assert.equal(conflict.code, 1);
+    assert.match(conflict.stderr, /需单独使用/);
+
+    const full = await run(['--save'], lines);
+    assert.equal(full.code, 0, full.stderr);
+    const saved = JSON.parse(full.stdout);
+    assert.equal(saved.mode, 'replace');
+    assert.deepEqual(saved.changed, ['SESSDATA', 'bili_jct']);
+    assert.equal(saved.skipped[0].name, 'bmg_af_sc');
+    assert.ok(saved.missing_recommended.includes('DedeUserID'));
+    const config = JSON.parse(await fs.readFile(path.join(dir, 'cookies.json'), 'utf8'));
+    assert.equal(config.cookies.SESSDATA, 'session');
+    assert.equal(config.cookies.bmg_af_sc, undefined);
+    config.cookies.bmg_af_sc = '{"none":1}';
+    await fs.writeFile(path.join(dir, 'cookies.json'), JSON.stringify(config, null, 2));
+
+    const merged = await run(
+      ['--merge', '--save'],
+      JSON.stringify({ cookies: { bili_ticket: 'ticket', bili_ticket_expires: '1700259200' } }),
+    );
+    assert.equal(merged.code, 0, merged.stderr);
+    const mergedSummary = JSON.parse(merged.stdout);
+    assert.equal(mergedSummary.mode, 'merge');
+    assert.deepEqual(mergedSummary.changed, ['bili_ticket', 'bili_ticket_expires']);
+    const after = JSON.parse(await fs.readFile(path.join(dir, 'cookies.json'), 'utf8'));
+    assert.equal(after.cookies.SESSDATA, 'session');
+    assert.equal(after.cookies.bili_ticket, 'ticket');
+    assert.equal(after.cookies.bmg_af_sc, undefined);
+    assert.ok(mergedSummary.skipped.some((item) => item.name === 'bmg_af_sc'));
+
+    const header = await run([], lines);
+    assert.equal(header.code, 0, header.stderr);
+    assert.equal(header.stdout.trim(), 'SESSDATA=session; bili_jct=csrf');
+    assert.match(header.stderr, /bmg_af_sc/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });

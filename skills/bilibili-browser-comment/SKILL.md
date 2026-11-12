@@ -26,7 +26,7 @@ B站网页版发表图片评论时会带浏览器生成的 `b_wet` 和 `x-bili-m
 ## 一条命令
 
 ```bash
-node scripts/post-image-comment-agent-browser.mjs \
+node scripts/post-image-comment.mjs \
   --url https://www.bilibili.com/video/BV1ZN4y1x74v/ \
   --image /path/to/comment.jpg \
   --text "@汐儿不是鱼 喵"
@@ -35,14 +35,14 @@ node scripts/post-image-comment-agent-browser.mjs \
 只输出 rpid 和是否带图：
 
 ```bash
-node scripts/post-image-comment-agent-browser.mjs ... --quiet
+node scripts/post-image-comment.mjs ... --quiet
 # rpid=319... has_image=true
 ```
 
 先检查 agent-browser、Cookie 注入和页面打开：
 
 ```bash
-node scripts/post-image-comment-agent-browser.mjs --probe \
+node scripts/post-image-comment.mjs --probe \
   --url https://www.bilibili.com/ --quiet
 ```
 

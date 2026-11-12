@@ -2,7 +2,7 @@
 /**
  * One-command image comment poster for the `agent-browser` CLI (Linux friendly).
  *
- *   node scripts/post-image-comment-agent-browser.mjs \
+ *   node scripts/post-image-comment.mjs \
  *     --url https://www.bilibili.com/video/BV.../ \
  *     --image /path/to/comment.png \
  *     --text "@汐儿不是鱼 喵"
@@ -31,8 +31,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function usage() {
   return `用法:
-  node scripts/post-image-comment-agent-browser.mjs --url <BV/av/链接/动态ID> --image <本地图片> --text <评论正文> [选项]
-  node scripts/post-image-comment-agent-browser.mjs <BV/av/链接/动态ID> <本地图片> <评论正文...> [选项]
+  node scripts/post-image-comment.mjs --url <BV/av/链接/动态ID> --image <本地图片> --text <评论正文> [选项]
+  node scripts/post-image-comment.mjs <BV/av/链接/动态ID> <本地图片> <评论正文...> [选项]
 
 选项:
   --agent-browser <path>  agent-browser 可执行文件，默认 agent-browser
@@ -45,7 +45,7 @@ function usage() {
   --probe                 只打开页面，输出 title/url，检查 agent-browser 和登录态
 
 示例:
-  node scripts/post-image-comment-agent-browser.mjs \\
+  node scripts/post-image-comment.mjs \\
     --url https://www.bilibili.com/video/BV1ZN4y1x74v/ \\
     --image /path/to/a.png --text "@汐儿不是鱼 喵"
 
@@ -345,6 +345,6 @@ window.postBiliImageComment(${JSON.stringify(payload)})
 }
 
 main().catch((error) => {
-  process.stderr.write(`post-image-comment-agent-browser: ${error.message}\n`);
+  process.stderr.write(`post-image-comment: ${error.message}\n`);
   process.exitCode = 1;
 });

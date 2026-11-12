@@ -25,7 +25,7 @@ function usage() {
 
 登录态:
   MCP 不提取登录态。请使用 bilibili-login skill，或设置 BILI_COOKIE，
-  或运行 node scripts/save-cookie.mjs 从 stdin 写入 Cookie。
+  或运行 node scripts/cookie.mjs --save --verify 从 stdin 写入 Cookie。
 
 配置文件: ${paths().cookieFile}
 `;

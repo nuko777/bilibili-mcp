@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.7`（npm dist-tag：`beta`）：
+已发布 `0.1.0-beta.8`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -63,7 +63,7 @@ bili --help
 ```bash
 git clone https://github.com/nuko777/bilibili-mcp.git
 cd bilibili-mcp
-npm test          # 40 个离线测试，不需要登录
+npm test          # 50 个离线测试，不需要登录
 npm start         # 启动 stdio MCP Server
 ```
 
@@ -133,16 +133,21 @@ Windows 上如果客户端无法解析 `.cmd`，用 `bili-mcp.cmd` 或上面的 
 
 MCP 只消费登录态，不提取登录态。推荐流程：
 
-1. 浏览器登录 `https://www.bilibili.com/`。
-2. 使用仓库内的 `bilibili-login` skill：
+1. 按 `bilibili-login` skill 选择一种方式：
+   - 有 `agent-browser`：打开海外登录页扫码，用统一脚本导入并校验；
    - 有 `chrome-devtools` MCP：从已登录页面的 `nav` 请求读取 Cookie；
-   - 有 `agent-browser`：导出 Cookie 到本地文件；
-   - 或由用户在自己的终端执行 `node scripts/save-cookie.mjs --verify`。
-3. 校验：
+   - 或由用户在自己的终端执行 `node scripts/cookie.mjs --save --verify`。
+2. 校验：
 
 ```bash
-node scripts/save-cookie.mjs --verify   # stdin 输入 Cookie，随后 Ctrl-D / Ctrl-Z
-node scripts/import-cookie-file.mjs ./cookies.txt --verify
+# agent-browser：直接管道
+agent-browser cookies get | node scripts/cookie.mjs --save --verify
+
+# 手动 / chrome-devtools：命令会等待 stdin，粘贴 Cookie 后 Ctrl-D / Ctrl-Z+Enter
+node scripts/cookie.mjs --save --verify
+
+# 非交互：从文件或 here-doc 读 stdin
+cat cookie-header.txt | node scripts/cookie.mjs --save --verify
 ```
 
 Cookie 文件位置：
@@ -155,6 +160,18 @@ Cookie 文件位置：
 
 运行中的 MCP 会检查 `cookies.json` 的 mtime，文件更新后自动重载；若客户端仍显示旧登录态，重连 MCP。完整 `BILI_COOKIE` 在进程生命周期内固定；只设置单项 `BILI_*` 环境变量时会与文件合并，文件更新仍会热重载。
 
+### 每日首次调用
+
+`auth_status` 仅在 `bili_ticket` 缺失或临近过期时刷新当前进程的票据，并返回 `cookie_update` 元数据（`expires_at`），不再返回 Cookie 值，避免票据进入 agent 上下文。写回本地用一条命令：
+
+```bash
+node scripts/cookie.mjs --refresh-ticket
+```
+
+它会读取本地 `cookies.json`、强制刷新票据并写回，输出摘要（登录态、昵称、硬币、`expires_at`），不输出 Cookie 值。写回后 MCP 会按 mtime 热重载；`bili_ticket` 是约 3 天有效的辅助风控票据，刷新失败不影响登录态和只读工具；失败时 `auth_status` 会返回 `cookie_update_error`。
+
+每日运营流程见 [skills/bilibili-ops/SKILL.md](skills/bilibili-ops/SKILL.md)。
+
 详细步骤见 [skills/bilibili-login/SKILL.md](skills/bilibili-login/SKILL.md)。
 
 ## Skills
@@ -163,7 +180,7 @@ Cookie 文件位置：
 
 | Skill | 用途 |
 | --- | --- |
-| [`bilibili-login`](skills/bilibili-login/SKILL.md) | 从已登录浏览器注入 Cookie，处理 `-101` 未登录 |
+| [`bilibili-login`](skills/bilibili-login/SKILL.md) | agent-browser 扫码或已登录浏览器注入 Cookie，处理 `-101` 未登录 |
 | [`bilibili-video-digest`](skills/bilibili-video-digest/SKILL.md) | 单个视频的理解：元信息、字幕/关键帧选型、返回字段与取帧 |
 | [`bilibili-browser-comment`](skills/bilibili-browser-comment/SKILL.md) | 在浏览器中发布带图评论（MCP 拒绝 API 图片评论） |
 | [`bilibili-ops`](skills/bilibili-ops/SKILL.md) | 账号自主运营手册：人设、评论风格、互动边界与每日节奏 |
@@ -195,6 +212,7 @@ src/server.mjs
 - Cookie 来源：`BILI_COOKIE` 完整头，或 `cookies.json` + 单项环境变量合并。
 - CSRF：写请求使用表单字段 `csrf`（不是 `csrf_token`）。
 - WBI：`wts` + `w_rid`；签名和最终 query 使用同一个编码函数，避免 `%20` / `+` 与 `!'()*` 二次编码不一致。
+- `bili_ticket`：`auth_status` 按需调用 `GenWebTicket` 刷新并只返回元数据；写回本地用 `node scripts/cookie.mjs --refresh-ticket`。
 - 图片上传：手写 multipart 并显式设置 `Content-Length`；Node `FormData` 的 chunked 编码会被 B站 CSRF 解析拒绝。
 - 评论带图：MCP `post_comment` 只支持文本，`image_paths` 会被拒绝；图片评论用浏览器脚本。
 - 视频评论的 `Referer` 必须是视频页 URL；用默认首页会被判为低信任请求并进入 `state=17`。
@@ -245,7 +263,7 @@ src/server.mjs
 
 | 类别 | 工具 |
 |---|---|
-| 账号 | `auth_status` |
+| 账号 | `auth_status`（按需刷新 `bili_ticket`，仅返回元数据） |
 | 榜单 | `rank_list`、`popular_list`、`weekly_issues`、`weekly_list`、`precious_list` |
 | 视频 | `video_info`、`video_transcript`、`video_frames`（含九宫格）、`danmaku`、`related_videos` |
 | 评论 | `comments`（视频/动态，含楼中楼、state、@成员、置顶 `top_replies`） |
@@ -326,7 +344,7 @@ mcp__bilibili__post_comment {"dynamic_id": "1261344079956934665", "message": "�
 ## 测试
 
 ```bash
-npm test          # 40 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
+npm test          # 50 个离线测试（WBI、Cookie、参数校验、MCP 协议等）
 npm run test:live # 需要有效 Cookie；BILI_TEST_BVID 可选
 npm run verify    # 只读端到端检查；未设置 BILI_TEST_BVID 时跳过视频项
 ```
@@ -349,7 +367,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.7`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.7)（prerelease，含 npm tarball）。
+已发布：[`v0.1.0-beta.8`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.8)（prerelease，含 npm tarball）。
 
 ## 后续计划
 
@@ -366,7 +384,7 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
 - 读取通知/聊天记录会触发 B站已读状态；`notifications` 的 feed 结果、`messages` 的聊天记录都带 `read_side_effect` / `read_note`；未读数查询和会话列表带 `read_side_effect:false` / `read_note`。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
-- `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。图片评论按 `bilibili-browser-comment` skill 走 agent-browser（需 Node 24+ 和已安装的 agent-browser）：`node scripts/post-image-comment-agent-browser.mjs --url ... --image ... --text ...`（自动注入 MCP Cookie、内部轮询、返回 rpid/has_image）。
+- `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。图片评论按 `bilibili-browser-comment` skill 走 agent-browser（需 Node 24+ 和已安装的 agent-browser）：`node scripts/post-image-comment.mjs --url ... --image ... --text ...`（自动注入 MCP Cookie、内部轮询、返回 rpid/has_image）。
 
 ## 明确不实现
 
@@ -392,6 +410,7 @@ Cookie 等价于账号密码。
 - MCP 不读取浏览器、不解密 Cookie 数据库、不做扫码登录。
 - 登录态由外部 skill/脚本写入 `cookies.json`，或通过 `BILI_COOKIE` 提供。
 - 不要把 Cookie 写入仓库、README、截图、issue 或提交记录。
+- `cookie.mjs` 默认输出的 Cookie 头是敏感数据；只写本地，不要公开或提交。
 - 配置文件应位于用户目录；POSIX 下尽量使用 0600，Windows 下以用户目录 ACL 为准。
 - 使用 `chrome-devtools` 读取 `nav` 请求时，完整 Cookie 会出现在工具输出/会话记录中；如果记录可能被导出或共享，请退出登录后重新登录或重新生成 Cookie。
 
@@ -416,6 +435,15 @@ Cookie 等价于账号密码。
 
 ## Changelog
 
+### 0.1.0-beta.8 — 2026-11-13
+
+- `auth_status` 刷新 `bili_ticket` 后只返回 `expires_at` 元数据，不再返回 Cookie 值；新增 `scripts/cookie.mjs --refresh-ticket` 一键刷新并写回本地
+- `bilibili-ops` 增加每日首次刷新票据的流程；`bilibili-login` 补充写回提示
+- 新增 `scripts/cookie.mjs`：统一 stdin Cookie 过滤/合并入口，支持 agent-browser 逐行导出、Cookie 头和规范 JSON；默认纯过滤，`--save` 或 `--refresh-ticket` 才写回本地
+- 移除旧的 `save-cookie` / `import-cookie-file`；Cookie 入口统一为 `scripts/cookie.mjs`
+- 图片评论脚本更名为 `scripts/post-image-comment.mjs`（原 `post-image-comment-agent-browser.mjs`）
+- 离线测试 50 项
+
 ### 0.1.0-beta.7 — 2026-11-12
 
 - 收藏夹接口不再返回 `fid`：`list_favorites` / `create_favorite_folder` 只暴露 `id`（media_id）；`fid` 不被 fav API 接受，且可能撞上别人的同名 media_id（写操作报 `11010`）
@@ -432,7 +460,7 @@ Cookie 等价于账号密码。
 - `post_dynamic` 支持 `mention_user_ids`，按浏览器抓包构造 `contents` 的 `type:2` AT 组件；正文已有 `@昵称` 时就地转换，否则追加在末尾
 - `post_comment` 只在 `parent !== root`（真正的楼中楼）时自动生成 `回复 @父作者 : ` 前缀；直接回复顶层评论保持原文，符合浏览器实际请求
 - `bilibili-browser-comment` 脚本等待所有可观察的 fetch `upload_bfs` 上传结束并校验图片预览；发布前拦截可观察到的 fetch/XHR `/x/v2/reply/add`，请求体没有非空且带 URL 的 `pictures` 时中止，避免静默发成纯文本评论
-- 图片评论合并为 `scripts/post-image-comment-agent-browser.mjs` 单入口：自动注入 MCP Cookie、内部重试/轮询，返回 `rpid` 与 `has_image`；移除独立页面脚本和 CDP CLI
+- 图片评论合并为 `scripts/post-image-comment.mjs` 单入口：自动注入 MCP Cookie、内部重试/轮询，返回 `rpid` 与 `has_image`；移除独立页面脚本和 CDP CLI
 - `bilibili-ops` / `bilibili-video-digest` skill 流程更新：按视频内容选择字幕或关键帧、补充弹幕/热门评论、动态阅读与发布后回读；明确 owner UID、@ 上下文、主动私信边界和日常节奏
 - 离线测试增加到 40 项，覆盖动态点赞、mention、楼中楼前缀和图片评论 guard
 
@@ -523,10 +551,10 @@ src/
   server.mjs            stdio MCP 入口
   mcp/protocol.mjs      JSON-RPC 结果/工具描述
   tools/index.mjs       44 个工具 schema + 参数校验
-  core/                 HTTP、WBI、Cookie、配置、错误、格式化
+  core/                 HTTP、WBI、bili_ticket、Cookie、配置、错误、格式化
   api/                  榜单、视频、互动、关系、收藏、消息、动态
   media/                字幕、关键帧、播放流、ffmpeg
-scripts/                Cookie 导入、只读验收、agent-browser 图片评论快捷脚本
+scripts/                统一 Cookie 过滤/合并、只读验收、图片评论快捷脚本
 skills/                 4 个 DSH skill（见 Skills 一节）
 test/                   离线 / MCP / live 测试
 ```

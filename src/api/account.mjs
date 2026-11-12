@@ -1,12 +1,24 @@
+import { needsTicketRefresh } from '../core/ticket.mjs';
+
 export async function nav(client) {
   const json = await client.get('https://api.bilibili.com/x/web-interface/nav', {}, { allowCodes: [0, -101], cacheTtl: 0 });
   return json;
 }
 
-export async function authStatus(client) {
+export async function authStatus(client, { forceTicketRefresh = false } = {}) {
   const navJson = await nav(client);
   const data = navJson.data || {};
   const isLogin = navJson.code === 0 && Boolean(data.isLogin);
+  let cookieUpdate = null;
+  let cookieUpdateError = null;
+  if (isLogin && (forceTicketRefresh || needsTicketRefresh(client.cookies))) {
+    try {
+      const refreshed = await client.refreshBiliTicket();
+      cookieUpdate = { expires_at: refreshed.expires_at };
+    } catch (error) {
+      cookieUpdateError = `bili_ticket 刷新失败：${error.message}`;
+    }
+  }
   let unread = null;
   let privateUnread = null;
   if (isLogin) {
@@ -44,6 +56,11 @@ export async function authStatus(client) {
     mobile_verified: Boolean(data.mobile_verified),
     unread,
     private_unread: privateUnread,
+    cookie_update: cookieUpdate || undefined,
+    cookie_update_error: cookieUpdateError || undefined,
+    cookie_update_hint: cookieUpdate
+      ? 'bili_ticket 已在当前进程刷新；运行 node scripts/cookie.mjs --refresh-ticket 写回本地 cookies.json（不返回 Cookie 值）。'
+      : undefined,
     hint: isLogin
       ? undefined
       : 'MCP 不提取登录态。请使用 bilibili-login skill 从浏览器获取 Cookie，写入配置或 BILI_COOKIE 后重试。',

@@ -19,7 +19,7 @@
 
 包名：`@lobo777/bilibili-mcp`（scoped，避免和已有的 `bilibili-mcp` 冲突）。
 
-已发布 `0.1.0-beta.8`（npm dist-tag：`beta`）：
+已发布 `0.1.0-beta.9`（npm dist-tag：`beta`）：
 
 ```bash
 npm install -g @lobo777/bilibili-mcp@beta
@@ -357,17 +357,58 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 
 ## Release
 
-发布流程已配置在 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
+发布由 **推送 tag** 触发，工作流在 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
 
-1. 更新 `package.json` 版本号和下方 Changelog；
-2. 提交并打 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`；
-3. GitHub Actions 会运行测试、`npm pack`、上传 tarball、创建 GitHub Release；
-4. 若仓库配置了 `NPM_TOKEN` secret，还会执行 `npm publish --provenance`（已发布的版本会跳过）；
-5. 预发布版本发布后会把 `latest` 一并指到该版本；一旦发布过正式版，`latest` 就保持在正式版，不再被新的 beta 覆盖。
+### 版本约定
+
+- 预发布：`0.1.0-beta.N`，tag 为 `v0.1.0-beta.N`（例如 `v0.1.0-beta.9`），npm dist-tag 为 `beta`。
+- 正式版：`X.Y.Z`，tag 为 `vX.Y.Z`，npm dist-tag 为 `latest`。
+- 不要重复发布已存在的版本；工作流检测到 npm 上已有同版本会跳过 publish，但仍会创建 GitHub Release。
+
+### 发包步骤
+
+```bash
+# 1. 改版本号（不要让它自动打 tag）+ 更新下方 Changelog
+npm version 0.1.0-beta.9 --no-git-tag-version
+# 同时更新 README 顶部的“已发布”版本、Release 链接和 Changelog
+
+# 2. 跑离线测试
+npm test
+
+# 3. 提交
+git add -A
+git commit -m "release: 0.1.0-beta.9"
+
+# 4. 打 annotated tag 并推送（tag 才会触发 Release）
+git tag -a v0.1.0-beta.9 -m "v0.1.0-beta.9"
+git push origin main
+git push origin v0.1.0-beta.9
+```
+
+> 只推 `main` 不会发包，必须推 tag。工作流会校验 tag 必须等于 `v${package.json.version}`，不一致会直接失败。
+
+### 流水线行为
+
+1. `npm test`；
+2. `npm pack`，上传 tarball artifact；
+3. 若配置了 `NPM_TOKEN` secret，执行 `npm publish --access public --tag beta|latest --provenance`；已发布的版本会跳过；
+4. 创建 GitHub Release（预发布自动标记 prerelease，并附带 tarball）；
+5. 预发布版本发布后会把 `latest` 一并指向该版本；一旦发布过正式版，`latest` 保持在正式版，不再被新的 beta 覆盖。
+
+### 发布后检查
+
+```bash
+gh run list --workflow=release.yml --limit 3
+npm view @lobo777/bilibili-mcp@0.1.0-beta.9 version
+npm view @lobo777/bilibili-mcp dist-tags
+gh release view v0.1.0-beta.9
+```
+
+没有 `gh` 时，在 GitHub 仓库的 Actions 页面看 `Release` workflow，并在 npm 页面确认版本。
 
 `NPM_TOKEN` 建议使用 npm **Granular Access Token**：对 `@lobo777/bilibili-mcp` 有 Read and write 权限，并启用 Bypass 2FA。不要使用过期或已泄露的 token。
 
-已发布：[`v0.1.0-beta.8`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.8)（prerelease，含 npm tarball）。
+已发布：[`v0.1.0-beta.9`](https://github.com/nuko777/bilibili-mcp/releases/tag/v0.1.0-beta.9)（prerelease，含 npm tarball）。
 
 ## 后续计划
 
@@ -384,7 +425,9 @@ BILI_LIVE_TEST=1 BILI_LIVE_WRITE=1 npm run test:live
 - 动态详情接口可用，但不同动态类型字段不同；评论主体需从 `basic.comment_type` / `basic.comment_id_str` 解析。
 - 读取通知/聊天记录会触发 B站已读状态；`notifications` 的 feed 结果、`messages` 的聊天记录都带 `read_side_effect` / `read_note`；未读数查询和会话列表带 `read_side_effect:false` / `read_note`。
 - 评论 `state=11/17` 可能是审核、索引延迟或仅自己可见；返回 `pending_review`，不要据此立即删除。
+- `post_comment` 会自动对 `/x/v2/reply/add` 做 WBI 签名。B站 2026-11 起，未签名的纯表单请求即使返回 `state=0`，评论也会被标记为仅自己可见（`state=17`，匿名读取 `12006`）；签名后恢复正常公开。
 - `post_comment` 不支持带图：传 `image_paths` 会直接拒绝，避免 API 图片评论仅自己可见。图片评论按 `bilibili-browser-comment` skill 走 agent-browser（需 Node 24+ 和已安装的 agent-browser）：`node scripts/post-image-comment.mjs --url ... --image ... --text ...`（自动注入 MCP Cookie、内部轮询、返回 rpid/has_image）。
+- 图片评论可能被 B站二次审核：即使网页端请求带齐 `b_wet` / `x-bili-metadata-gaia-bin` 并返回 `state=0`，后续仍可能变为 `state=17`（仅自己可见）；发布后需用另一账号复核，不要连续重试。
 
 ## 明确不实现
 
@@ -434,6 +477,14 @@ Cookie 等价于账号密码。
 如果发现安全问题，请通过仓库 issue 或维护者公开联系方式报告，不要在 issue 中粘贴 Cookie、SESSDATA、bili_jct 或完整请求头。
 
 ## Changelog
+
+### 0.1.0-beta.9 — 2026-11-19
+
+- 修复 `post_comment` 被 B站标记为仅自己可见：`/x/v2/reply/add` 现在使用 WBI 签名（`w_rid`/`wts`）。B站 2026-11 起未签名的纯表单请求即使返回 `state=0`，也会转为 `state=17` 且匿名读取返回 `12006`；签名后恢复正常公开
+- `post_comment` 离线测试改为强制校验签名路径，覆盖顶层评论与楼中楼
+- `bilibili-ops` 运营规范调整：交互策略、评论生成、日常动态节奏
+- 图片评论仍可能被 B站二次审核：网页端请求带齐 `b_wet` / `x-bili-metadata-gaia-bin` 并返回 `state=0` 后，仍可能变为 `state=17`（仅自己可见）；`scripts/post-image-comment.mjs` 的参数与网页端一致，但无法绕过审核，发布后建议用另一账号复核
+- 离线测试 50 项
 
 ### 0.1.0-beta.8 — 2026-11-13
 

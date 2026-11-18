@@ -541,7 +541,10 @@ export async function postComment(
   if (syncToDynamic) form.sync_to_dynamic = 1;
   if (root) form.root = String(root);
   if (parent) form.parent = String(parent);
-  const result = await client.postForm('https://api.bilibili.com/x/v2/reply/add', form, {
+  // B站 now requires WBI signing on /x/v2/reply/add. A plain form POST is
+  // accepted with state=0, but the comment is then only visible to its author
+  // (state=17, anonymous reads return 12006). The web UI sends w_rid/wts too.
+  const result = await client.postSignedForm('https://api.bilibili.com/x/v2/reply/add', form, {
     retry: 0,
     referer,
   });

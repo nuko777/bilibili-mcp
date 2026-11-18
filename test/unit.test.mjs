@@ -82,8 +82,11 @@ function commentReplyFake() {
       }
       throw new Error(`unexpected endpoint: ${url}`);
     },
-    postForm: async (url, form) => {
-      calls.posts.push({ url, form });
+    postForm: async () => {
+      throw new Error('comment/reply POST must use WBI signing');
+    },
+    postSignedForm: async (url, form) => {
+      calls.posts.push({ url, form, signed: true });
       return { code: 0, message: 'OK', data: {} };
     },
   };
@@ -958,6 +961,7 @@ test('post_comment top-level reply keeps user text unchanged', async () => {
   });
   assert.equal(calls.posts.length, 1);
   assert.equal(calls.threads, 0);
+  assert.equal(calls.posts[0].signed, true);
   assert.equal(calls.posts[0].form.message, '顶层原文');
   assert.equal(calls.posts[0].form.root, REPLY_ROOT_RPID);
   assert.equal(calls.posts[0].form.parent, REPLY_ROOT_RPID);
@@ -976,6 +980,7 @@ test('post_comment nested reply prefixes the parent author', async () => {
   });
   assert.equal(calls.threads, 1);
   assert.equal(calls.posts.length, 1);
+  assert.equal(calls.posts[0].signed, true);
   assert.equal(calls.posts[0].form.message, '回复 @汐儿不是鱼 : 嵌套原文');
   assert.equal(calls.posts[0].form.root, REPLY_ROOT_RPID);
   assert.equal(calls.posts[0].form.parent, REPLY_NESTED_RPID);
